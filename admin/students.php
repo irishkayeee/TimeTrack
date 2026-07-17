@@ -1,0 +1,302 @@
+<?php
+require_once __DIR__ . '/../includes/functions.php';
+requireRole(['admin', 'superadmin']);
+$pageTitle = 'Manage Students';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!verifyCsrf($_POST['csrf_token'] ?? '')) {
+        flash('Invalid form submission.', 'danger');
+        redirect('students.php');
+    }
+    if ($_POST['action'] === 'save_student') {
+        $id = intval($_POST['id'] ?? 0);
+        $studentId = sanitize($_POST['student_id'] ?? '');
+        $firstName = sanitize($_POST['first_name'] ?? '');
+        $lastName = sanitize($_POST['last_name'] ?? '');
+        $gender = sanitize($_POST['gender'] ?? '');
+        $birthday = sanitize($_POST['birthday'] ?? '');
+        $courseId = intval($_POST['course_id'] ?? 0);
+        $yearLevel = sanitize($_POST['year_level'] ?? '');
+        $sectionId = intval($_POST['section_id'] ?? 0);
+        $guardian = sanitize($_POST['guardian'] ?? '');
+        $phone = sanitize($_POST['phone'] ?? '');
+        $email = sanitize($_POST['email'] ?? '');
+        $status = sanitize($_POST['status'] ?? 'active');
+        if (!$studentId) {
+            $studentId = 'S' . time() . rand(10,99);
+        }
+        $photo = '';
+        if (!empty($_FILES['photo']['name'])) {
+            $ext = pathinfo($_FILES['photo']['name'], PATHINFO_EXTENSION);
+            $allowed = ['jpg','jpeg','png'];
+            if (in_array(strtolower($ext), $allowed)) {
+                $photo = 'uploads/student_' . time() . '.' . $ext;
+                move_uploaded_file($_FILES['photo']['tmp_name'], __DIR__ . '/../' . $photo);
+            }
+        }
+        if ($id) {
+            $qrToken = $studentId;
+            $stmt = $mysqli->prepare('UPDATE students SET student_id = ?, first_name = ?, last_name = ?, gender = ?, birthday = ?, course_id = ?, year_level = ?, section_id = ?, guardian_name = ?, phone = ?, email = ?, status = ?, qr_code = ?' . ($photo ? ', photo = ?' : '') . ' WHERE id = ?');
+            if ($photo) {
+                $stmt->bind_param('sssssisissssssi', $studentId, $firstName, $lastName, $gender, $birthday, $courseId, $yearLevel, $sectionId, $guardian, $phone, $email, $status, $qrToken, $photo, $id);
+            } else {
+                $stmt->bind_param('sssssisisssssi', $studentId, $firstName, $lastName, $gender, $birthday, $courseId, $yearLevel, $sectionId, $guardian, $phone, $email, $status, $qrToken, $id);
+            }
+            $stmt->execute();
+            $stmt->close();
+            flash('Student updated successfully.', 'success');
+        } else {
+            $stmt = $mysqli->prepare('INSERT INTO students (student_id, first_name, last_name, gender, birthday, course_id, year_level, section_id, guardian_name, phone, email, status, photo, qr_code, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())');
+            $qrToken = $studentId;
+            $stmt->bind_param('sssssisissssss', $studentId, $firstName, $lastName, $gender, $birthday, $courseId, $yearLevel, $sectionId, $guardian, $phone, $email, $status, $photo, $qrToken);
+            $stmt->execute();
+            $stmt->close();
+            flash('Student added successfully.', 'success');
+        }
+        redirect('students.php');
+    }
+    if ($_POST['action'] === 'delete_student' && !empty($_POST['student_id'])) {
+        $sid = intval($_POST['student_id']);
+        $stmt = $mysqli->prepare('DELETE FROM students WHERE id = ?');
+        $stmt->bind_param('i', $sid);
+        $stmt->execute();
+        $stmt->close();
+        flash('Student record deleted.', 'success');
+        redirect('students.php');
+    }
+    if ($_POST['action'] === 'import_students' && !empty($_FILES['csv_file']['tmp_name'])) {
+        $file = fopen($_FILES['csv_file']['tmp_name'], 'r');
+        $row = 0;
+        while (($data = fgetcsv($file, 1000, ',')) !== false) {
+            $row++;
+            if ($row === 1) {
+                continue;
+            }
+            $studentId = sanitize($data[0] ?? '');
+            $firstName = sanitize($data[1] ?? '');
+            $lastName = sanitize($data[2] ?? '');
+            $gender = sanitize($data[3] ?? '');
+            $birthday = sanitize($data[4] ?? '');
+            $courseId = intval($data[5] ?? 0);
+            $yearLevel = sanitize($data[6] ?? '');
+            $sectionId = intval($data[7] ?? 0);
+            $guardian = sanitize($data[8] ?? '');
+            $phone = sanitize($data[9] ?? '');
+            $email = sanitize($data[10] ?? '');
+            $status = sanitize($data[11] ?? 'active');
+            if (!$studentId) {
+                $studentId = 'S' . time() . rand(10,99);
+            }
+            $qrToken = $studentId;
+            $stmt = $mysqli->prepare('INSERT INTO students (student_id, first_name, last_name, gender, birthday, course_id, year_level, section_id, guardian_name, phone, email, status, qr_code, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())');
+            $stmt->bind_param('sssssiissssss', $studentId, $firstName, $lastName, $gender, $birthday, $courseId, $yearLevel, $sectionId, $guardian, $phone, $email, $status, $qrToken);
+            $stmt->execute();
+            $stmt->close();
+        }
+        fclose($file);
+        flash('Student list imported successfully.', 'success');
+        redirect('students.php');
+    }
+    if ($_POST['action'] === 'export_students') {
+        header('Content-Type: text/csv');
+        header('Content-Disposition: attachment; filename="students_export_' . date('Ymd') . '.csv"');
+        $output = fopen('php://output', 'w');
+        fputcsv($output, ['Student ID','First Name','Last Name','Gender','Birthday','Course ID','Year Level','Section ID','Guardian','Phone','Email','Status']);
+        $result = $mysqli->query('SELECT student_id, first_name, last_name, gender, birthday, course_id, year_level, section_id, guardian_name, phone, email, status FROM students');
+        while ($row = $result->fetch_assoc()) {
+            fputcsv($output, $row);
+        }
+        fclose($output);
+        exit;
+    }
+}
+
+$courses = $mysqli->query('SELECT id, code, name FROM courses ORDER BY name');
+$sections = $mysqli->query('SELECT id, section_name FROM sections ORDER BY section_name');
+$students = $mysqli->query('SELECT s.*, c.code AS course_code, sec.section_name FROM students s LEFT JOIN courses c ON s.course_id = c.id LEFT JOIN sections sec ON s.section_id = sec.id ORDER BY s.created_at DESC');
+require_once __DIR__ . '/../includes/header.php';
+require_once __DIR__ . '/../includes/admin_nav.php';
+?>
+<div class="card rounded-4 shadow-sm p-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4>Student Management</h4>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#studentModal">Add Student</button>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover" id="studentsTable">
+            <thead class="table-light">
+                <tr>
+                    <th>QR</th>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Course</th>
+                    <th>Section</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php while ($row = $students->fetch_assoc()): ?>
+                    <tr>
+                        <td><a href="qr-generator.php?student_id=<?php echo $row['id']; ?>" class="btn btn-sm btn-outline-secondary">QR</a></td>
+                        <td><?php echo htmlspecialchars($row['student_id']); ?></td>
+                        <td><?php echo htmlspecialchars($row['first_name'] . ' ' . $row['last_name']); ?></td>
+                        <td><?php echo htmlspecialchars($row['course_code']); ?></td>
+                        <td><?php echo htmlspecialchars($row['section_name']); ?></td>
+                        <td><?php echo badgeStatus($row['status']); ?></td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary btn-edit" data-data='<?php echo json_encode($row); ?>'>Edit</button>
+                            <form method="post" class="d-inline-block" onsubmit="return confirm('Delete this student?');">
+                                <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
+                                <input type="hidden" name="action" value="delete_student">
+                                <input type="hidden" name="student_id" value="<?php echo $row['id']; ?>">
+                                <button class="btn btn-sm btn-outline-danger">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                <?php endwhile; ?>
+            </tbody>
+        </table>
+    </div>
+    <div class="row mt-4">
+        <div class="col-md-6">
+            <form method="post" enctype="multipart/form-data" class="card rounded-4 p-3 shadow-sm">
+                <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
+                <input type="hidden" name="action" value="import_students">
+                <h6>Import Students CSV</h6>
+                <div class="mb-3">
+                    <input type="file" class="form-control" name="csv_file" accept=".csv" required>
+                </div>
+                <button class="btn btn-success">Upload CSV</button>
+            </form>
+        </div>
+        <div class="col-md-6">
+            <form method="post" class="card rounded-4 p-3 shadow-sm">
+                <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
+                <input type="hidden" name="action" value="export_students">
+                <h6>Export Students</h6>
+                <button class="btn btn-outline-primary">Download CSV</button>
+            </form>
+        </div>
+    </div>
+</div>
+</div>
+</div>
+
+<div class="modal fade" id="studentModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content rounded-4">
+            <div class="modal-header">
+                <h5 class="modal-title">Student Form</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="post" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
+                <input type="hidden" name="action" value="save_student">
+                <input type="hidden" name="id" id="studentIdField">
+                <div class="modal-body row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Student Code</label>
+                        <input type="text" class="form-control" name="student_id" id="studentCodeField">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">First Name</label>
+                        <input type="text" class="form-control" name="first_name" id="firstNameField" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Last Name</label>
+                        <input type="text" class="form-control" name="last_name" id="lastNameField" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Gender</label>
+                        <select name="gender" id="genderField" class="form-select">
+                            <option value="Male">Male</option>
+                            <option value="Female">Female</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Birthday</label>
+                        <input type="date" class="form-control" name="birthday" id="birthdayField" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Guardian</label>
+                        <input type="text" class="form-control" name="guardian" id="guardianField">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Phone</label>
+                        <input type="text" class="form-control" name="phone" id="phoneField">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="form-control" name="email" id="emailField">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Course</label>
+                        <select class="form-select" name="course_id" id="courseField">
+                            <option value="0">Unassigned</option>
+                            <?php while ($course = $courses->fetch_assoc()): ?>
+                                <option value="<?php echo $course['id']; ?>"><?php echo htmlspecialchars($course['code'] . ' - ' . $course['name']); ?></option>
+                            <?php endwhile; ?>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Year Level</label>
+                        <input type="text" class="form-control" name="year_level" id="yearField">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Section</label>
+                        <select class="form-select" name="section_id" id="sectionField">
+                            <option value="0">Unassigned</option>
+                            <?php while ($section = $sections->fetch_assoc()): ?>
+                                <option value="<?php echo $section['id']; ?>"><?php echo htmlspecialchars($section['section_name']); ?></option>
+                            <?php endwhile; ?>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Status</label>
+                        <select class="form-select" name="status" id="statusField">
+                            <option value="active">Active</option>
+                            <option value="inactive">Inactive</option>
+                        </select>
+                    </div>
+                    <div class="col-md-12">
+                        <label class="form-label">Photo</label>
+                        <input type="file" class="form-control" name="photo">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Student</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<script>
+const editButtons = document.querySelectorAll('.btn-edit');
+const studentModal = new bootstrap.Modal(document.getElementById('studentModal'));
+editButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+        const data = JSON.parse(btn.getAttribute('data-data'));
+        document.getElementById('studentIdField').value = data.id;
+        document.getElementById('studentCodeField').value = data.student_id;
+        document.getElementById('firstNameField').value = data.first_name;
+        document.getElementById('lastNameField').value = data.last_name;
+        document.getElementById('genderField').value = data.gender;
+        document.getElementById('birthdayField').value = data.birthday;
+        document.getElementById('guardianField').value = data.guardian_name;
+        document.getElementById('phoneField').value = data.phone;
+        document.getElementById('emailField').value = data.email;
+        document.getElementById('courseField').value = data.course_id;
+        document.getElementById('yearField').value = data.year_level;
+        document.getElementById('sectionField').value = data.section_id;
+        document.getElementById('statusField').value = data.status;
+        studentModal.show();
+    });
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+    $('#studentsTable').DataTable({ responsive: true });
+});
+</script>
+<?php require_once __DIR__ . '/../includes/footer.php'; ?>
