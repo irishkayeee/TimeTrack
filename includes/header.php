@@ -4,9 +4,7 @@ checkRememberMe();
 $user = currentUser();
 $pageTitle = isset($pageTitle) ? $pageTitle : 'School Attendance Management';
 $schoolName = getSetting('school_name', 'Attendance Management System');
-$projectRoot = realpath(__DIR__ . '/..');
-$scriptDir = realpath(dirname($_SERVER['SCRIPT_FILENAME']));
-$rootPrefix = ($scriptDir === $projectRoot) ? '' : '../';
+$rootPrefix = rootPrefix();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -20,6 +18,7 @@ $rootPrefix = ($scriptDir === $projectRoot) ? '' : '../';
     <link rel="stylesheet" href="<?php echo $rootPrefix; ?>assets/css/theme-tokens.css">
     <link rel="stylesheet" href="<?php echo $rootPrefix; ?>assets/css/style.css">
     <link rel="stylesheet" href="<?php echo $rootPrefix; ?>assets/css/dashboard-theme.css">
+    <link rel="stylesheet" href="<?php echo $rootPrefix; ?>assets/css/student-portal.css">
 </head>
 <body class="bg-light">
 <header class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top shadow-sm">

@@ -1,7 +1,8 @@
 <?php
 require_once __DIR__ . '/../includes/functions.php';
 requireRole(['teacher']);
-$pageTitle = 'My Students';
+$pageTitle = 'Students';
+$pageSubtitle = 'Manage students in your assigned sections.';
 
 $teacherId = currentTeacherId();
 if ($teacherId === false) {
@@ -20,6 +21,21 @@ while ($row = $sectionResult->fetch_assoc()) {
     $sectionRows[] = $row;
 }
 $sectionStmt->close();
+
+$filterSubjectId = intval($_GET['subject_id'] ?? 0);
+$filterSubjectName = null;
+$displaySections = $allowedSections;
+if ($filterSubjectId) {
+    $subjStmt = $mysqli->prepare('SELECT code, name, section_id FROM subjects WHERE id = ? AND teacher_id = ?');
+    $subjStmt->bind_param('ii', $filterSubjectId, $teacherId);
+    $subjStmt->execute();
+    $subjRow = $subjStmt->get_result()->fetch_assoc();
+    $subjStmt->close();
+    if ($subjRow) {
+        $filterSubjectName = $subjRow['code'] . ' - ' . $subjRow['name'];
+        $displaySections = [(int) $subjRow['section_id']];
+    }
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verifyCsrf($_POST['csrf_token'] ?? '')) {
@@ -79,16 +95,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $newCredentials = flashCredentialsMessage();
 $courses = $mysqli->query('SELECT id, code, name FROM courses ORDER BY name');
 $students = [];
-if ($allowedSections) {
-    $placeholders = implode(',', array_fill(0, count($allowedSections), '?'));
-    $types = str_repeat('i', count($allowedSections));
+if ($displaySections) {
+    $placeholders = implode(',', array_fill(0, count($displaySections), '?'));
+    $types = str_repeat('i', count($displaySections));
     $stmt = $mysqli->prepare("SELECT s.*, c.code AS course_code, sec.section_name FROM students s LEFT JOIN courses c ON s.course_id = c.id LEFT JOIN sections sec ON s.section_id = sec.id WHERE s.section_id IN ($placeholders) ORDER BY s.created_at DESC");
-    $stmt->bind_param($types, ...$allowedSections);
+    $stmt->bind_param($types, ...$displaySections);
     $stmt->execute();
     $students = $stmt->get_result();
 }
-require_once __DIR__ . '/../includes/header.php';
-require_once __DIR__ . '/../includes/teacher_nav.php';
+require_once __DIR__ . '/../includes/teacher_header.php';
 ?>
 <?php if ($newCredentials): ?>
     <div class="alert alert-success rounded-4">
@@ -99,9 +114,14 @@ require_once __DIR__ . '/../includes/teacher_nav.php';
         </div>
     </div>
 <?php endif; ?>
-<div class="card rounded-4 shadow-sm p-4">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h4>My Students</h4>
+<div class="card p-4">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div>
+            <h5 class="mb-0">My Students</h5>
+            <?php if ($filterSubjectName): ?>
+                <p class="text-muted small mb-0">Filtered by <?php echo htmlspecialchars($filterSubjectName); ?> — <a href="students.php">clear filter</a></p>
+            <?php endif; ?>
+        </div>
         <?php if ($allowedSections): ?>
             <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#studentModal">Add Student</button>
         <?php endif; ?>
@@ -152,8 +172,6 @@ require_once __DIR__ . '/../includes/teacher_nav.php';
         </table>
     </div>
     <?php endif; ?>
-</div>
-</div>
 </div>
 
 <div class="modal fade" id="studentModal" tabindex="-1" aria-hidden="true">
@@ -245,30 +263,30 @@ require_once __DIR__ . '/../includes/teacher_nav.php';
     </div>
 </div>
 <script>
-const editButtons = document.querySelectorAll('.btn-edit');
-const studentModal = new bootstrap.Modal(document.getElementById('studentModal'));
-editButtons.forEach(btn => {
-    btn.addEventListener('click', () => {
-        const data = JSON.parse(btn.getAttribute('data-data'));
-        document.getElementById('studentIdField').value = data.id;
-        document.getElementById('studentCodeField').value = data.student_id;
-        document.getElementById('firstNameField').value = data.first_name;
-        document.getElementById('lastNameField').value = data.last_name;
-        document.getElementById('genderField').value = data.gender;
-        document.getElementById('birthdayField').value = data.birthday;
-        document.getElementById('guardianField').value = data.guardian_name;
-        document.getElementById('phoneField').value = data.phone;
-        document.getElementById('emailField').value = data.email;
-        document.getElementById('courseField').value = data.course_id;
-        document.getElementById('yearField').value = data.year_level;
-        document.getElementById('sectionField').value = data.section_id;
-        document.getElementById('statusField').value = data.status;
-        studentModal.show();
-    });
-});
-
 document.addEventListener('DOMContentLoaded', () => {
+    const editButtons = document.querySelectorAll('.btn-edit');
+    const studentModal = new bootstrap.Modal(document.getElementById('studentModal'));
+    editButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const data = JSON.parse(btn.getAttribute('data-data'));
+            document.getElementById('studentIdField').value = data.id;
+            document.getElementById('studentCodeField').value = data.student_id;
+            document.getElementById('firstNameField').value = data.first_name;
+            document.getElementById('lastNameField').value = data.last_name;
+            document.getElementById('genderField').value = data.gender;
+            document.getElementById('birthdayField').value = data.birthday;
+            document.getElementById('guardianField').value = data.guardian_name;
+            document.getElementById('phoneField').value = data.phone;
+            document.getElementById('emailField').value = data.email;
+            document.getElementById('courseField').value = data.course_id;
+            document.getElementById('yearField').value = data.year_level;
+            document.getElementById('sectionField').value = data.section_id;
+            document.getElementById('statusField').value = data.status;
+            studentModal.show();
+        });
+    });
+
     $('#myStudentsTable').DataTable({ responsive: true });
 });
 </script>
-<?php require_once __DIR__ . '/../includes/footer.php'; ?>
+<?php require_once __DIR__ . '/../includes/teacher_footer.php'; ?>

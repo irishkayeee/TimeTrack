@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../includes/functions.php';
 requireRole(['teacher']);
 $pageTitle = 'Live Session';
+$pageSubtitle = 'Real-time attendance for an ongoing class.';
 
 $teacherId = currentTeacherId();
 if ($teacherId === false) {
@@ -27,12 +28,11 @@ if ($subjectId) {
     $verify->close();
 }
 
-require_once __DIR__ . '/../includes/header.php';
-require_once __DIR__ . '/../includes/teacher_nav.php';
+require_once __DIR__ . '/../includes/teacher_header.php';
 ?>
-<div class="card rounded-4 shadow-sm p-4">
+<div class="card p-4">
     <?php if (!$roster): ?>
-        <h4>Live Session</h4>
+        <a href="subjects.php" class="text-decoration-none small d-inline-block mb-3"><i class="fa-solid fa-arrow-left me-1"></i> Back to My Classes</a>
         <p class="text-muted">Select a subject to view its live attendance.</p>
         <div class="row g-3">
             <?php if ($subjects->num_rows === 0): ?>
@@ -51,8 +51,8 @@ require_once __DIR__ . '/../includes/teacher_nav.php';
         </div>
     <?php else: ?>
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h4>Live Session</h4>
-            <a href="live.php" class="btn btn-outline-secondary">Change Subject</a>
+            <a href="subjects.php" class="text-decoration-none small"><i class="fa-solid fa-arrow-left me-1"></i> Back to My Classes</a>
+            <a href="live.php" class="btn btn-outline-secondary rounded-pill px-4">Change Subject</a>
         </div>
         <div class="row g-3 mb-4">
             <div class="col-md-3">
@@ -109,6 +109,4 @@ require_once __DIR__ . '/../includes/teacher_nav.php';
         </script>
     <?php endif; ?>
 </div>
-</div>
-</div>
-<?php require_once __DIR__ . '/../includes/footer.php'; ?>
+<?php require_once __DIR__ . '/../includes/teacher_footer.php'; ?>

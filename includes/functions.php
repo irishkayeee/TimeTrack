@@ -11,6 +11,12 @@ function redirect($url) {
     exit;
 }
 
+function rootPrefix() {
+    $projectRoot = realpath(__DIR__ . '/..');
+    $scriptDir = realpath(dirname($_SERVER['SCRIPT_FILENAME']));
+    return ($scriptDir === $projectRoot) ? '' : '../';
+}
+
 function currentUser() {
     return isset($_SESSION['user']) ? $_SESSION['user'] : null;
 }
@@ -31,7 +37,7 @@ function isTeacher() {
 
 function requireLogin() {
     if (!isLoggedIn()) {
-        redirect('landing.php?login=1');
+        redirect(rootPrefix() . 'landing.php?login=1');
     }
 }
 
@@ -39,7 +45,7 @@ function requireRole($roles = []) {
     requireLogin();
     $user = currentUser();
     if (!in_array($user['role'], $roles)) {
-        redirect('landing.php?login=1');
+        redirect(rootPrefix() . 'landing.php?login=1');
     }
 }
 
@@ -302,6 +308,7 @@ function saveStudentRecord($mysqli, $postData, $files, $allowedSectionIds = null
         return ['success' => false, 'message' => 'You can only manage students in your own sections.', 'type' => 'danger', 'credentials' => null];
     }
     if ($id && $allowedSectionIds !== null) {
+        $existingSectionId = null;
         $check = $mysqli->prepare('SELECT section_id FROM students WHERE id = ?');
         $check->bind_param('i', $id);
         $check->execute();
@@ -359,6 +366,7 @@ function saveStudentRecord($mysqli, $postData, $files, $allowedSectionIds = null
 
 function deleteStudentRecord($mysqli, $studentDbId, $allowedSectionIds = null) {
     if ($allowedSectionIds !== null) {
+        $existingSectionId = null;
         $check = $mysqli->prepare('SELECT section_id FROM students WHERE id = ?');
         $check->bind_param('i', $studentDbId);
         $check->execute();
@@ -369,6 +377,7 @@ function deleteStudentRecord($mysqli, $studentDbId, $allowedSectionIds = null) {
             return false;
         }
     }
+    $linkedUserId = null;
     $stmt = $mysqli->prepare('SELECT user_id FROM students WHERE id = ?');
     $stmt->bind_param('i', $studentDbId);
     $stmt->execute();
