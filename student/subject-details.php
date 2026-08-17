@@ -53,7 +53,7 @@ if ($nextDateTime < time()) {
 }
 $minutesUntil = round(($nextDateTime - time()) / 60);
 
-$absentCutoff = intval(getSetting('absent_cutoff_minutes', 20));
+$absentCutoff = effectiveAbsentCutoff($subject);
 
 require_once __DIR__ . '/../includes/student_header.php';
 renderSubjectPageHeader($subject, 'overview');

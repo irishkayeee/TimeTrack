@@ -9,7 +9,11 @@ if ($teacherId === false) {
 }
 
 $subjectId = intval($_GET['id'] ?? 0);
-$stmt = $mysqli->prepare('SELECT sub.*, sec.section_name FROM subjects sub JOIN sections sec ON sub.section_id = sec.id WHERE sub.id = ? AND sub.teacher_id = ? LIMIT 1');
+$stmt = $mysqli->prepare('SELECT sub.*, sec.section_name, sec.year_level, c.code AS course_code, c.name AS course_name
+    FROM subjects sub
+    JOIN sections sec ON sub.section_id = sec.id
+    JOIN courses c ON sec.course_id = c.id
+    WHERE sub.id = ? AND sub.teacher_id = ? LIMIT 1');
 $stmt->bind_param('ii', $subjectId, $teacherId);
 $stmt->execute();
 $subject = $stmt->get_result()->fetch_assoc();
@@ -22,34 +26,50 @@ if (!$subject) {
 
 $pageTitle = $subject['code'];
 $pageSubtitle = $subject['name'];
-$theme = subjectTheme($subject['id']);
+
+$today = date('Y-m-d');
+$attStmt = $mysqli->prepare('SELECT a.*, s.student_id AS student_code, CONCAT(s.first_name, " ", s.last_name) AS student_name
+    FROM attendance a
+    JOIN students s ON a.student_id = s.id
+    WHERE a.subject_id = ? AND a.date = ?
+    ORDER BY a.time DESC');
+$attStmt->bind_param('is', $subjectId, $today);
+$attStmt->execute();
+$todayAttendance = $attStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+$attStmt->close();
 
 require_once __DIR__ . '/../includes/teacher_header.php';
 ?>
-<a href="subjects.php" class="text-decoration-none small d-inline-block mb-3"><i class="fa-solid fa-arrow-left me-1"></i> Back to My Classes</a>
+<a href="subjects.php" class="sp-back-link d-inline-flex mb-3"><i class="fa-solid fa-arrow-left"></i> Back to My Classes</a>
 
-<div class="card p-4 mb-3">
-    <div class="d-flex align-items-start gap-3 flex-wrap">
-        <div class="sp-mc-icon-box" style="--mc-color: <?php echo $theme['color']; ?>; width:56px; height:56px; font-size:1.4rem;"><i class="fa-solid <?php echo $theme['icon']; ?>"></i></div>
-        <div class="flex-grow-1">
-            <h4 class="mb-1"><?php echo htmlspecialchars($subject['code']); ?> — <?php echo htmlspecialchars($subject['name']); ?></h4>
-            <div class="sp-mc-meta">
-                <span><i class="fa-solid fa-calendar"></i> <?php echo htmlspecialchars($subject['day_of_week']); ?> | <?php echo formatTime($subject['start_time']); ?><?php echo $subject['end_time'] ? ' - ' . formatTime($subject['end_time']) : ''; ?></span>
-                <span><i class="fa-solid fa-location-dot"></i> <?php echo htmlspecialchars($subject['room'] ?: 'No room set'); ?></span>
-                <span><i class="fa-solid fa-user-group"></i> <?php echo htmlspecialchars($subject['section_name']); ?></span>
-                <?php if ($subject['credit_units']): ?><span><i class="fa-solid fa-award"></i> <?php echo (int) $subject['credit_units']; ?> units</span><?php endif; ?>
-            </div>
-        </div>
-        <span class="badge <?php echo $subject['status'] === 'active' ? 'sp-mc-badge sp-mc-badge-ongoing' : 'sp-mc-badge sp-mc-badge-inactive'; ?>"><?php echo $subject['status'] === 'active' ? 'Active' : 'Inactive'; ?></span>
+<?php renderTeacherClassHeader($subject, 'details'); ?>
+
+<div class="card p-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="mb-0 text-uppercase small fw-bold"><i class="fa-solid fa-clipboard-check me-1"></i> Today's Attendance</h6>
+        <a href="attendance.php?subject_id=<?php echo $subject['id']; ?>" class="small text-decoration-none">View Full Records <i class="fa-solid fa-arrow-right ms-1"></i></a>
     </div>
-    <?php if ($subject['important_note']): ?>
-        <div class="alert alert-warning mt-3 mb-0"><i class="fa-solid fa-circle-exclamation me-1"></i> <?php echo nl2br(htmlspecialchars($subject['important_note'])); ?></div>
+    <?php if (empty($todayAttendance)): ?>
+        <p class="text-muted small mb-0">No attendance recorded yet today.</p>
+    <?php else: ?>
+        <div class="table-responsive">
+            <table class="table align-middle mb-0">
+                <thead class="table-light">
+                    <tr><th class="py-3">ID</th><th class="py-3">Student</th><th class="py-3">Time</th><th class="py-3">Status</th></tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($todayAttendance as $r): ?>
+                        <tr>
+                            <td class="py-3"><?php echo htmlspecialchars($r['student_code']); ?></td>
+                            <td class="py-3"><?php echo htmlspecialchars($r['student_name']); ?></td>
+                            <td class="py-3"><?php echo formatTime($r['time']); ?></td>
+                            <td class="py-3"><?php echo badgeStatus($r['status']); ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
     <?php endif; ?>
-</div>
-
-<div class="sp-detail-tabs">
-    <a href="attendance.php?subject_id=<?php echo $subject['id']; ?>"><i class="fa-solid fa-clipboard-check"></i> Attendance</a>
-    <a href="students.php?subject_id=<?php echo $subject['id']; ?>"><i class="fa-solid fa-users"></i> Students</a>
 </div>
 
 <?php require_once __DIR__ . '/../includes/teacher_footer.php'; ?>

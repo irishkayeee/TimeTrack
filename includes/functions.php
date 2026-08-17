@@ -162,6 +162,42 @@ function generateSecurePassword($length = 10) {
     return $password;
 }
 
+function ensureSectionJoinCode($mysqli, $sectionId) {
+    $stmt = $mysqli->prepare('SELECT join_code FROM sections WHERE id = ? LIMIT 1');
+    $stmt->bind_param('i', $sectionId);
+    $stmt->execute();
+    $stmt->bind_result($joinCode);
+    $stmt->fetch();
+    $stmt->close();
+
+    if ($joinCode) {
+        return $joinCode;
+    }
+
+    $alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    $max = strlen($alphabet) - 1;
+    for ($attempt = 0; $attempt < 10; $attempt++) {
+        $candidate = '';
+        for ($i = 0; $i < 6; $i++) {
+            $candidate .= $alphabet[random_int(0, $max)];
+        }
+        $check = $mysqli->prepare('SELECT id FROM sections WHERE join_code = ? LIMIT 1');
+        $check->bind_param('s', $candidate);
+        $check->execute();
+        $check->store_result();
+        $isUnique = $check->num_rows === 0;
+        $check->close();
+        if ($isUnique) {
+            $update = $mysqli->prepare('UPDATE sections SET join_code = ? WHERE id = ?');
+            $update->bind_param('si', $candidate, $sectionId);
+            $update->execute();
+            $update->close();
+            return $candidate;
+        }
+    }
+    return null;
+}
+
 function createUserAccountFor($mysqli, $role, $baseUsername, $email, &$plainPassword) {
     $username = $baseUsername;
     $email = $email ?: (strtolower(preg_replace('/[^a-z0-9]/i', '', $baseUsername)) . '@timetrack.local');
@@ -201,28 +237,28 @@ function flashCredentialsMessage() {
     return null;
 }
 
-function computeAttendanceStatus($startTime, $scanTime) {
+function computeAttendanceStatus($startTime, $scanTime, $absentCutoff = null) {
     $diffMinutes = (strtotime($scanTime) - strtotime($startTime)) / 60;
     if ($diffMinutes <= 0) {
         return 'present';
     }
-    $absentCutoff = intval(getSetting('absent_cutoff_minutes', 20));
+    $absentCutoff = $absentCutoff !== null ? intval($absentCutoff) : intval(getSetting('absent_cutoff_minutes', 20));
     return $diffMinutes < $absentCutoff ? 'late' : 'absent';
 }
 
-function virtualRosterStatus($startTime, $nowTime = null) {
+function virtualRosterStatus($startTime, $nowTime = null, $absentCutoff = null) {
     $now = $nowTime ?: date('H:i:s');
     $diffMinutes = (strtotime($now) - strtotime($startTime)) / 60;
     if ($diffMinutes < 0) {
         return 'pending';
     }
-    $absentCutoff = intval(getSetting('absent_cutoff_minutes', 20));
+    $absentCutoff = $absentCutoff !== null ? intval($absentCutoff) : intval(getSetting('absent_cutoff_minutes', 20));
     return $diffMinutes < $absentCutoff ? 'pending' : 'absent';
 }
 
 function getLiveRosterForSubject($mysqli, $subjectId) {
     $emptyCounts = ['present' => 0, 'late' => 0, 'absent' => 0, 'pending' => 0];
-    $stmt = $mysqli->prepare('SELECT id, teacher_id, section_id, start_time, day_of_week FROM subjects WHERE id = ? LIMIT 1');
+    $stmt = $mysqli->prepare('SELECT id, teacher_id, section_id, start_time, day_of_week, absent_cutoff_minutes FROM subjects WHERE id = ? LIMIT 1');
     $stmt->bind_param('i', $subjectId);
     $stmt->execute();
     $subject = $stmt->get_result()->fetch_assoc();
@@ -243,12 +279,16 @@ function getLiveRosterForSubject($mysqli, $subjectId) {
     $rows = [];
     $counts = $emptyCounts;
     while ($row = $result->fetch_assoc()) {
-        $row['display_status'] = $row['scanned_status'] ?: virtualRosterStatus($subject['start_time']);
+        $row['display_status'] = $row['scanned_status'] ?: virtualRosterStatus($subject['start_time'], null, $subject['absent_cutoff_minutes']);
         $counts[$row['display_status']]++;
         $rows[] = $row;
     }
     $stmt->close();
     return ['subject' => $subject, 'rows' => $rows, 'counts' => $counts];
+}
+
+function effectiveAbsentCutoff($subject) {
+    return $subject['absent_cutoff_minutes'] !== null ? intval($subject['absent_cutoff_minutes']) : intval(getSetting('absent_cutoff_minutes', 20));
 }
 
 function currentTeacherId() {
@@ -324,6 +364,7 @@ function saveStudentRecord($mysqli, $postData, $files, $allowedSectionIds = null
     }
     $courseIdParam = $courseId ?: null;
     $sectionIdParam = $sectionId ?: null;
+    $birthdayParam = $birthday !== '' ? $birthday : null;
     $photo = '';
     if (!empty($files['photo']['name'])) {
         $ext = pathinfo($files['photo']['name'], PATHINFO_EXTENSION);
@@ -337,9 +378,9 @@ function saveStudentRecord($mysqli, $postData, $files, $allowedSectionIds = null
         $qrToken = $studentId;
         $stmt = $mysqli->prepare('UPDATE students SET student_id = ?, first_name = ?, last_name = ?, gender = ?, birthday = ?, course_id = ?, year_level = ?, section_id = ?, guardian_name = ?, phone = ?, email = ?, status = ?, qr_code = ?' . ($photo ? ', photo = ?' : '') . ' WHERE id = ?');
         if ($photo) {
-            $stmt->bind_param('sssssisissssssi', $studentId, $firstName, $lastName, $gender, $birthday, $courseIdParam, $yearLevel, $sectionIdParam, $guardian, $phone, $email, $status, $qrToken, $photo, $id);
+            $stmt->bind_param('sssssisissssssi', $studentId, $firstName, $lastName, $gender, $birthdayParam, $courseIdParam, $yearLevel, $sectionIdParam, $guardian, $phone, $email, $status, $qrToken, $photo, $id);
         } else {
-            $stmt->bind_param('sssssisisssssi', $studentId, $firstName, $lastName, $gender, $birthday, $courseIdParam, $yearLevel, $sectionIdParam, $guardian, $phone, $email, $status, $qrToken, $id);
+            $stmt->bind_param('sssssisisssssi', $studentId, $firstName, $lastName, $gender, $birthdayParam, $courseIdParam, $yearLevel, $sectionIdParam, $guardian, $phone, $email, $status, $qrToken, $id);
         }
         $stmt->execute();
         $stmt->close();
@@ -348,7 +389,7 @@ function saveStudentRecord($mysqli, $postData, $files, $allowedSectionIds = null
 
     $stmt = $mysqli->prepare('INSERT INTO students (student_id, first_name, last_name, gender, birthday, course_id, year_level, section_id, guardian_name, phone, email, status, photo, qr_code, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())');
     $qrToken = $studentId;
-    $stmt->bind_param('sssssisissssss', $studentId, $firstName, $lastName, $gender, $birthday, $courseIdParam, $yearLevel, $sectionIdParam, $guardian, $phone, $email, $status, $photo, $qrToken);
+    $stmt->bind_param('sssssisissssss', $studentId, $firstName, $lastName, $gender, $birthdayParam, $courseIdParam, $yearLevel, $sectionIdParam, $guardian, $phone, $email, $status, $photo, $qrToken);
     $stmt->execute();
     $stmt->close();
     $newId = $mysqli->insert_id;
@@ -395,6 +436,39 @@ function deleteStudentRecord($mysqli, $studentDbId, $allowedSectionIds = null) {
     $stmt->execute();
     $stmt->close();
     return true;
+}
+
+function renderTeacherClassHeader($subject, $activeTab) {
+    $theme = subjectTheme($subject['id']);
+    ?>
+    <div class="card p-4 mb-3 sp-greeting-card d-flex flex-column justify-content-center" style="min-height: 220px;">
+        <div class="d-flex align-items-start gap-3 flex-wrap">
+            <div class="sp-mc-icon-box" style="--mc-color: <?php echo $theme['color']; ?>; width:56px; height:56px; font-size:1.4rem;"><i class="fa-solid <?php echo $theme['icon']; ?>"></i></div>
+            <div class="flex-grow-1">
+                <h4 class="mb-3"><?php echo htmlspecialchars($subject['code']); ?> — <?php echo htmlspecialchars($subject['name']); ?></h4>
+                <div class="sp-mc-meta mb-3" style="gap: 1.25rem;">
+                    <span><i class="fa-solid fa-calendar"></i> <?php echo htmlspecialchars($subject['day_of_week']); ?> | <?php echo formatTime($subject['start_time']); ?><?php echo $subject['end_time'] ? ' - ' . formatTime($subject['end_time']) : ''; ?></span>
+                    <span><i class="fa-solid fa-location-dot"></i> <?php echo htmlspecialchars($subject['room'] ?: 'No room set'); ?></span>
+                    <?php if ($subject['credit_units']): ?><span><i class="fa-solid fa-award"></i> <?php echo (int) $subject['credit_units']; ?> units</span><?php endif; ?>
+                </div>
+                <div class="d-flex flex-wrap gap-3">
+                    <span class="sp-shd-pill"><i class="fa-solid fa-graduation-cap"></i> <?php echo htmlspecialchars($subject['course_code'] . ' - ' . $subject['course_name']); ?></span>
+                    <span class="sp-shd-pill"><i class="fa-solid fa-user-group"></i> <?php echo htmlspecialchars($subject['year_level'] . ' - ' . $subject['section_name']); ?></span>
+                </div>
+            </div>
+            <span class="badge <?php echo $subject['status'] === 'active' ? 'sp-mc-badge sp-mc-badge-ongoing' : 'sp-mc-badge sp-mc-badge-inactive'; ?>" style="font-size: 0.95rem; padding: 0.5rem 1.1rem;"><?php echo $subject['status'] === 'active' ? 'Active' : 'Inactive'; ?></span>
+        </div>
+        <?php if (!empty($subject['important_note'])): ?>
+            <div class="alert alert-warning mt-3 mb-0"><i class="fa-solid fa-circle-exclamation me-1"></i> <?php echo nl2br(htmlspecialchars($subject['important_note'])); ?></div>
+        <?php endif; ?>
+    </div>
+
+    <div class="sp-detail-tabs">
+        <?php if ($activeTab !== 'details'): ?><a href="class-details.php?id=<?php echo $subject['id']; ?>"><i class="fa-solid fa-file-lines"></i> Details</a><?php endif; ?>
+        <?php if ($activeTab !== 'attendance'): ?><a href="attendance.php?subject_id=<?php echo $subject['id']; ?>"><i class="fa-solid fa-clipboard-check"></i> Attendance</a><?php endif; ?>
+        <?php if ($activeTab !== 'announcements'): ?><a href="class-announcements.php?subject_id=<?php echo $subject['id']; ?>"><i class="fa-solid fa-bullhorn"></i> Announcements</a><?php endif; ?>
+    </div>
+    <?php
 }
 
 function renderSubjectPageHeader($subject, $activeTab) {

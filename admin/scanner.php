@@ -61,7 +61,7 @@ if ($activeSubject) {
     $totalStudents = count($roster['rows']);
 }
 $scannedTotal = count($scannedRows);
-$absentCutoff = intval(getSetting('absent_cutoff_minutes', 20));
+$absentCutoff = $activeSubject ? effectiveAbsentCutoff($activeSubject) : intval(getSetting('absent_cutoff_minutes', 20));
 
 $isTeacherView = $user['role'] === 'teacher';
 if ($isTeacherView) {

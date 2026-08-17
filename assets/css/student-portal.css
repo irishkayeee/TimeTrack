@@ -227,24 +227,29 @@ body.student-body {
     gap: 0.6rem;
 }
 
+.sp-user i.fa-circle-user {
+    font-size: 46px !important;
+}
+
 .sp-user img {
-    width: 38px;
-    height: 38px;
+    width: 46px;
+    height: 46px;
     border-radius: 50%;
     object-fit: cover;
     background: var(--lp-pale-green);
 }
 
 .sp-user-name {
-    font-size: 0.85rem;
-    font-weight: 600;
+    font-size: 1rem;
+    font-weight: 700;
     color: #1c2b23;
-    line-height: 1.1;
+    line-height: 1.3;
 }
 
 .sp-user-role {
-    font-size: 0.72rem;
-    color: #8a978f;
+    font-size: 0.8rem;
+    color: #5a6b60;
+    line-height: 1.3;
 }
 
 .sp-sidebar-toggle {
@@ -1527,5 +1532,15 @@ td.sp-status-excused {
     font-size: 0.85rem;
     color: #1c2b23;
     white-space: nowrap;
+}
+
+.sp-greeting-card {
+    background: #fff url('../images/header2.png') no-repeat center 78%;
+    background-size: cover;
+}
+
+.sp-greeting-card h4,
+.sp-greeting-card p {
+    color: #1c2b23;
 }
 

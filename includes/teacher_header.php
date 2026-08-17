@@ -13,7 +13,8 @@ if ($teacherDbId !== false) {
 $navItems = [
     ['href' => 'dashboard.php', 'icon' => 'fa-table-cells', 'label' => 'Dashboard'],
     ['href' => 'subjects.php', 'icon' => 'fa-book', 'label' => 'My Classes'],
-    ['href' => 'announcements.php', 'icon' => 'fa-bullhorn', 'label' => 'Announcements'],
+    ['href' => 'announcements.php', 'icon' => 'fa-bell', 'label' => 'Notifications'],
+    ['href' => 'profile.php', 'icon' => 'fa-user', 'label' => 'My Profile'],
 ];
 ?>
 <!DOCTYPE html>
@@ -71,7 +72,6 @@ $navItems = [
                 </div>
             </div>
             <div class="sp-topbar-right">
-                <div class="sp-bell"><i class="fa-solid fa-bell"></i><span class="sp-dot"></span></div>
                 <div class="sp-user">
                     <?php if ($sidebarTeacher && $sidebarTeacher['photo']): ?>
                         <img src="../<?php echo htmlspecialchars($sidebarTeacher['photo']); ?>" alt="">

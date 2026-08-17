@@ -22,8 +22,6 @@ $greeting = $hour < 12 ? 'Good morning' : ($hour < 18 ? 'Good afternoon' : 'Good
 $semester = getSetting('semester', '1st Semester');
 $schoolYear = getSetting('school_year', date('Y') . '-' . (date('Y') + 1));
 
-$absentCutoff = intval(getSetting('absent_cutoff_minutes', 20));
-
 // Months that actually have attendance history, for the month filter dropdown.
 $monthsStmt = $mysqli->prepare("SELECT DISTINCT DATE_FORMAT(date, '%Y-%m') AS ym FROM attendance WHERE student_id = ? ORDER BY ym DESC");
 $monthsStmt->bind_param('i', $studentDbId);
@@ -77,7 +75,7 @@ if ($sectionId) {
             $minutesSinceStart = (strtotime(date('H:i:s')) - strtotime($row['start_time'])) / 60;
             if ($minutesSinceStart < 0) {
                 $row['display_status'] = 'upcoming';
-            } elseif ($minutesSinceStart < $absentCutoff) {
+            } elseif ($minutesSinceStart < effectiveAbsentCutoff($row)) {
                 $row['display_status'] = 'ongoing';
             } else {
                 $row['display_status'] = 'absent';

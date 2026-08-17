@@ -70,8 +70,8 @@ $stmt->close();
 
 require_once __DIR__ . '/../includes/teacher_header.php';
 ?>
-<div class="card p-4 mb-3">
-    <h4 class="mb-1"><?php echo htmlspecialchars($greeting); ?>, <?php echo htmlspecialchars($me['first_name'] ?? 'Teacher'); ?>! 👋</h4>
+<div class="card p-4 mb-3 sp-greeting-card">
+    <h4 class="mb-1"><?php echo htmlspecialchars($greeting); ?>, Prof. <?php echo htmlspecialchars($me['first_name'] ?? 'Teacher'); ?>! 👋</h4>
     <p class="text-muted mb-0">Here's what's happening with your classes today.</p>
 </div>
 <div class="row g-3">

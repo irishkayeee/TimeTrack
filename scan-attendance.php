@@ -29,7 +29,7 @@ if (preg_match('/^(.+)\|SUBJ(\d+)$/', $qrValue, $matches)) {
         exit;
     }
 }
-$stmt = $mysqli->prepare("SELECT id, section_id, start_time, day_of_week FROM subjects WHERE id = ? AND status = 'active' LIMIT 1");
+$stmt = $mysqli->prepare("SELECT id, section_id, start_time, day_of_week, absent_cutoff_minutes FROM subjects WHERE id = ? AND status = 'active' LIMIT 1");
 $stmt->bind_param('i', $subjectId);
 $stmt->execute();
 $subject = $stmt->get_result()->fetch_assoc();
@@ -67,7 +67,7 @@ if ($countToday > 0) {
 }
 
 $scanTime = date('H:i:s');
-$status = computeAttendanceStatus($subject['start_time'], $scanTime);
+$status = computeAttendanceStatus($subject['start_time'], $scanTime, $subject['absent_cutoff_minutes']);
 
 $stmt = $mysqli->prepare('INSERT INTO attendance (student_id, course_id, section_id, subject_id, status, scan_type, date, time, created_at) VALUES (?, ?, ?, ?, ?, ?, CURDATE(), ?, NOW())');
 $stmt->bind_param('iiiisss', $student['id'], $student['course_id'], $student['section_id'], $subjectId, $status, $status, $scanTime);

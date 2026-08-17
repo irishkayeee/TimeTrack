@@ -13,9 +13,44 @@ if ($studentDbId === false) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'join_class') {
     if (!verifyCsrf($_POST['csrf_token'] ?? '')) {
         flash('Invalid request.', 'danger');
-    } else {
-        flash('Joining a subject by class code isn\'t available yet. Ask your admin to add you to a subject.', 'info');
+        redirect('subjects.php');
     }
+
+    $classCode = strtoupper(trim(sanitize($_POST['class_code'] ?? '')));
+    if ($classCode === '') {
+        flash('Please enter a class code.', 'danger');
+        redirect('subjects.php');
+    }
+
+    $sectionStmt = $mysqli->prepare('SELECT id, section_name, year_level FROM sections WHERE join_code = ? LIMIT 1');
+    $sectionStmt->bind_param('s', $classCode);
+    $sectionStmt->execute();
+    $targetSection = $sectionStmt->get_result()->fetch_assoc();
+    $sectionStmt->close();
+
+    if (!$targetSection) {
+        flash('That class code doesn\'t match any class. Double-check it with your teacher.', 'danger');
+        redirect('subjects.php');
+    }
+
+    $currentSectionStmt = $mysqli->prepare('SELECT section_id FROM students WHERE id = ?');
+    $currentSectionStmt->bind_param('i', $studentDbId);
+    $currentSectionStmt->execute();
+    $currentSectionStmt->bind_result($currentSectionId);
+    $currentSectionStmt->fetch();
+    $currentSectionStmt->close();
+
+    if ((int) $currentSectionId === (int) $targetSection['id']) {
+        flash('You\'re already in ' . $targetSection['year_level'] . ' - ' . $targetSection['section_name'] . '.', 'info');
+        redirect('subjects.php');
+    }
+
+    $updateStmt = $mysqli->prepare('UPDATE students SET section_id = ? WHERE id = ?');
+    $updateStmt->bind_param('ii', $targetSection['id'], $studentDbId);
+    $updateStmt->execute();
+    $updateStmt->close();
+
+    flash('Joined ' . $targetSection['year_level'] . ' - ' . $targetSection['section_name'] . '. Your class list now reflects this section.', 'success');
     redirect('subjects.php');
 }
 
@@ -166,6 +201,7 @@ require_once __DIR__ . '/../includes/student_header.php';
                         <p class="text-muted small mb-2">Ask your teacher for the class code, then enter it here.</p>
                         <input type="text" class="form-control" name="class_code" id="classCodeField" placeholder="Class code">
                     </div>
+                    <div class="alert alert-warning small mb-3"><i class="fa-solid fa-triangle-exclamation me-1"></i> Joining a code replaces your current section and class list &mdash; it doesn't just add one class.</div>
                     <p class="fw-semibold small mb-1">To sign in with a class code</p>
                     <ul class="text-muted small mb-0 ps-3">
                         <li>Use a class code with 5&ndash;8 letters or numbers, no spaces or symbols</li>

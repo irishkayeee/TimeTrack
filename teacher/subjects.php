@@ -76,6 +76,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash('Schedule updated.', 'success');
         redirect('subjects.php');
     }
+    if ($_POST['action'] === 'save_policy') {
+        $id = intval($_POST['id'] ?? 0);
+        $useDefault = isset($_POST['use_default']);
+        $cutoff = $useDefault ? null : max(1, intval($_POST['absent_cutoff_minutes'] ?? 20));
+
+        $refStmt = $mysqli->prepare('SELECT code, section_id FROM subjects WHERE id = ? AND teacher_id = ? LIMIT 1');
+        $refStmt->bind_param('ii', $id, $teacherId);
+        $refStmt->execute();
+        $ref = $refStmt->get_result()->fetch_assoc();
+        $refStmt->close();
+
+        if (!$ref) {
+            flash('Class not found.', 'danger');
+            redirect('subjects.php');
+        }
+
+        $upd = $mysqli->prepare('UPDATE subjects SET absent_cutoff_minutes = ? WHERE teacher_id = ? AND section_id = ? AND code = ?');
+        $upd->bind_param('iiis', $cutoff, $teacherId, $ref['section_id'], $ref['code']);
+        $upd->execute();
+        $upd->close();
+
+        flash('Attendance policy updated.', 'success');
+        redirect('subjects.php');
+    }
+    if ($_POST['action'] === 'save_room') {
+        $id = intval($_POST['id'] ?? 0);
+        $room = trim(sanitize($_POST['room'] ?? ''));
+        $room = $room !== '' ? $room : null;
+
+        $refStmt = $mysqli->prepare('SELECT code, section_id FROM subjects WHERE id = ? AND teacher_id = ? LIMIT 1');
+        $refStmt->bind_param('ii', $id, $teacherId);
+        $refStmt->execute();
+        $ref = $refStmt->get_result()->fetch_assoc();
+        $refStmt->close();
+
+        if (!$ref) {
+            flash('Class not found.', 'danger');
+            redirect('subjects.php');
+        }
+
+        $upd = $mysqli->prepare('UPDATE subjects SET room = ? WHERE teacher_id = ? AND section_id = ? AND code = ?');
+        $upd->bind_param('siis', $room, $teacherId, $ref['section_id'], $ref['code']);
+        $upd->execute();
+        $upd->close();
+
+        flash('Room updated.', 'success');
+        redirect('subjects.php');
+    }
 }
 
 $statusFilter = sanitize($_GET['status'] ?? 'active');
@@ -209,6 +257,7 @@ foreach ($cardGroups as &$group) {
         return $dayOrder[$a] <=> $dayOrder[$b];
     });
     $group['action_id'] = $group['day_ids'][$todayCode] ?? $group['day_ids'][$group['days'][0]];
+    $group['join_code'] = ensureSectionJoinCode($mysqli, $group['section_id']);
 }
 unset($group);
 
@@ -301,16 +350,20 @@ require_once __DIR__ . '/../includes/teacher_header.php';
                             <div class="sp-subject-meta">
                                 <span class="sp-subject-prof"><?php echo htmlspecialchars($group['section_name']); ?></span>
                                 <?php echo htmlspecialchars(implode(', ', $group['days'])); ?> | <?php echo formatTime($group['start_time']); ?><?php echo $group['end_time'] ? ' - ' . formatTime($group['end_time']) : ''; ?>
+                                <br><span class="text-muted">Join Code: <strong><?php echo htmlspecialchars($group['join_code'] ?: '—'); ?></strong></span>
                             </div>
                             <div class="dropdown">
                                 <button class="btn btn-sm btn-link text-secondary p-0" type="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="fa-solid fa-ellipsis-vertical"></i></button>
                                 <ul class="dropdown-menu dropdown-menu-end">
                                     <li><button class="dropdown-item btn-edit-schedule" type="button" data-data='<?php echo json_encode($group); ?>'>Edit Schedule</button></li>
+                                    <li><button class="dropdown-item btn-edit-policy" type="button" data-data='<?php echo json_encode($group); ?>'>Edit Attendance Policy</button></li>
+                                    <li><button class="dropdown-item btn-edit-room" type="button" data-data='<?php echo json_encode($group); ?>'>Edit Room</button></li>
                                 </ul>
                             </div>
                         </div>
                         <div class="sp-subject-actions">
                             <a href="class-details.php?id=<?php echo $group['action_id']; ?>"><i class="fa-solid fa-file-lines"></i>Details</a>
+                            <a href="students.php?subject_id=<?php echo $group['action_id']; ?>"><i class="fa-solid fa-users"></i>Students</a>
                             <a href="../admin/scanner.php?subject_id=<?php echo $group['action_id']; ?>"><i class="fa-solid fa-qrcode"></i>Take Attendance</a>
                         </div>
                     </div>
@@ -360,6 +413,60 @@ require_once __DIR__ . '/../includes/teacher_header.php';
         </div>
     </div>
 </div>
+
+<div class="modal fade" id="policyModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-4">
+            <div class="modal-header">
+                <h5 class="modal-title" id="policyModalTitle">Edit Attendance Policy</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="post">
+                <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
+                <input type="hidden" name="action" value="save_policy">
+                <input type="hidden" name="id" id="policyIdField">
+                <div class="modal-body">
+                    <p class="text-muted small">A student is marked <strong>Late</strong> if they scan after the start time but within this many minutes, and <strong>Absent</strong> if they scan later than that (or never scan).</p>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" name="use_default" id="policyUseDefaultField">
+                        <label class="form-check-label" for="policyUseDefaultField">Use school default (<?php echo intval(getSetting('absent_cutoff_minutes', 20)); ?> minutes)</label>
+                    </div>
+                    <label class="form-label">Absent after (minutes late)</label>
+                    <input type="number" class="form-control" name="absent_cutoff_minutes" id="policyCutoffField" min="1" max="180" required>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Policy</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="roomModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-4">
+            <div class="modal-header">
+                <h5 class="modal-title" id="roomModalTitle">Edit Room</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="post">
+                <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
+                <input type="hidden" name="action" value="save_room">
+                <input type="hidden" name="id" id="roomIdField">
+                <div class="modal-body">
+                    <p class="text-muted small">This also updates where students see this class's room.</p>
+                    <label class="form-label">Room</label>
+                    <input type="text" class="form-control" name="room" id="roomField" placeholder="e.g. IT Lab 5">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Room</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     const scheduleModal = new bootstrap.Modal(document.getElementById('scheduleModal'));
@@ -375,6 +482,36 @@ document.addEventListener('DOMContentLoaded', function () {
             document.getElementById('scheduleStartTimeField').value = data.start_time;
             document.getElementById('scheduleEndTimeField').value = data.end_time || '';
             scheduleModal.show();
+        });
+    });
+
+    const policyModal = new bootstrap.Modal(document.getElementById('policyModal'));
+    const policyUseDefaultField = document.getElementById('policyUseDefaultField');
+    const policyCutoffField = document.getElementById('policyCutoffField');
+    policyUseDefaultField.addEventListener('change', function () {
+        policyCutoffField.disabled = this.checked;
+    });
+    document.querySelectorAll('.btn-edit-policy').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const data = JSON.parse(btn.getAttribute('data-data'));
+            document.getElementById('policyModalTitle').textContent = 'Edit Attendance Policy — ' + data.name;
+            document.getElementById('policyIdField').value = data.id;
+            const hasCustom = data.absent_cutoff_minutes !== null && data.absent_cutoff_minutes !== undefined;
+            policyUseDefaultField.checked = !hasCustom;
+            policyCutoffField.value = hasCustom ? data.absent_cutoff_minutes : 20;
+            policyCutoffField.disabled = !hasCustom;
+            policyModal.show();
+        });
+    });
+
+    const roomModal = new bootstrap.Modal(document.getElementById('roomModal'));
+    document.querySelectorAll('.btn-edit-room').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const data = JSON.parse(btn.getAttribute('data-data'));
+            document.getElementById('roomModalTitle').textContent = 'Edit Room — ' + data.name;
+            document.getElementById('roomIdField').value = data.id;
+            document.getElementById('roomField').value = data.room || '';
+            roomModal.show();
         });
     });
 

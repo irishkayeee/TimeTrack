@@ -19,6 +19,19 @@ $subjectsStmt->execute();
 $mySubjects = $subjectsStmt->get_result()->fetch_all(MYSQLI_ASSOC);
 $subjectsStmt->close();
 
+$scopedSubject = null;
+if ($subjectId) {
+    $scopedStmt = $mysqli->prepare('SELECT sub.*, sec.section_name, sec.year_level, c.code AS course_code, c.name AS course_name
+        FROM subjects sub
+        JOIN sections sec ON sub.section_id = sec.id
+        JOIN courses c ON sec.course_id = c.id
+        WHERE sub.id = ? AND sub.teacher_id = ? LIMIT 1');
+    $scopedStmt->bind_param('ii', $subjectId, $teacherId);
+    $scopedStmt->execute();
+    $scopedSubject = $scopedStmt->get_result()->fetch_assoc();
+    $scopedStmt->close();
+}
+
 $query = 'SELECT a.*, s.student_id, CONCAT(s.first_name, " ", s.last_name) AS student_name, c.code AS course_code, sec.section_name, sub.name AS subject_name FROM attendance a LEFT JOIN students s ON a.student_id = s.id LEFT JOIN courses c ON a.course_id = c.id LEFT JOIN sections sec ON a.section_id = sec.id JOIN subjects sub ON a.subject_id = sub.id WHERE a.date = ? AND sub.teacher_id = ?';
 $types = 'si';
 $params = [$date, $teacherId];
@@ -34,16 +47,25 @@ $records->execute();
 $result = $records->get_result();
 require_once __DIR__ . '/../includes/teacher_header.php';
 ?>
+<a href="subjects.php" class="sp-back-link d-inline-flex mb-3"><i class="fa-solid fa-arrow-left"></i> Back to My Classes</a>
+
+<?php if ($scopedSubject): ?>
+    <?php renderTeacherClassHeader($scopedSubject, 'attendance'); ?>
+<?php endif; ?>
+
 <div class="card p-4">
-    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-        <a href="subjects.php" class="text-decoration-none small"><i class="fa-solid fa-arrow-left me-1"></i> Back to My Classes</a>
+    <div class="d-flex justify-content-end align-items-center mb-3 flex-wrap gap-2">
         <form method="get" class="d-flex gap-2">
-            <select class="form-select" name="subject_id">
-                <option value="0">All Classes</option>
-                <?php foreach ($mySubjects as $subj): ?>
-                    <option value="<?php echo $subj['id']; ?>" <?php echo $subjectId === (int) $subj['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($subj['code']); ?></option>
-                <?php endforeach; ?>
-            </select>
+            <?php if ($subjectId): ?>
+                <input type="hidden" name="subject_id" value="<?php echo $subjectId; ?>">
+            <?php else: ?>
+                <select class="form-select" name="subject_id">
+                    <option value="0">All Classes</option>
+                    <?php foreach ($mySubjects as $subj): ?>
+                        <option value="<?php echo $subj['id']; ?>"><?php echo htmlspecialchars($subj['code']); ?></option>
+                    <?php endforeach; ?>
+                </select>
+            <?php endif; ?>
             <input type="date" class="form-control" name="date" value="<?php echo htmlspecialchars($date); ?>">
             <button class="btn btn-primary">Filter</button>
         </form>
