@@ -14,27 +14,63 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $firstName = sanitize($_POST['first_name'] ?? '');
         $lastName = sanitize($_POST['last_name'] ?? '');
         $subject = sanitize($_POST['subject'] ?? '');
-        $sectionId = intval($_POST['section_id'] ?? 0);
+        $sectionId = intval($_POST['section_id'] ?? 0) ?: null;
         $phone = sanitize($_POST['phone'] ?? '');
         $email = sanitize($_POST['email'] ?? '');
         $status = sanitize($_POST['status'] ?? 'active');
+        $photo = '';
+        if (!empty($_FILES['photo']['name'])) {
+            $ext = pathinfo($_FILES['photo']['name'], PATHINFO_EXTENSION);
+            $allowed = ['jpg', 'jpeg', 'png'];
+            if (in_array(strtolower($ext), $allowed)) {
+                $photo = 'uploads/teacher_' . time() . '.' . $ext;
+                move_uploaded_file($_FILES['photo']['tmp_name'], __DIR__ . '/../' . $photo);
+            }
+        }
         if ($id) {
-            $stmt = $mysqli->prepare('UPDATE teachers SET teacher_id = ?, first_name = ?, last_name = ?, subject = ?, section_id = ?, phone = ?, email = ?, status = ? WHERE id = ?');
-            $stmt->bind_param('ssssiissi', $teacherId, $firstName, $lastName, $subject, $sectionId, $phone, $email, $status, $id);
+            $stmt = $mysqli->prepare('UPDATE teachers SET teacher_id = ?, first_name = ?, last_name = ?, subject = ?, section_id = ?, phone = ?, email = ?, status = ?' . ($photo ? ', photo = ?' : '') . ' WHERE id = ?');
+            if ($photo) {
+                $stmt->bind_param('ssssissssi', $teacherId, $firstName, $lastName, $subject, $sectionId, $phone, $email, $status, $photo, $id);
+            } else {
+                $stmt->bind_param('ssssisssi', $teacherId, $firstName, $lastName, $subject, $sectionId, $phone, $email, $status, $id);
+            }
             $stmt->execute();
             $stmt->close();
             flash('Teacher updated successfully.', 'success');
         } else {
-            $stmt = $mysqli->prepare('INSERT INTO teachers (teacher_id, first_name, last_name, subject, section_id, phone, email, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())');
-            $stmt->bind_param('ssssiiss', $teacherId, $firstName, $lastName, $subject, $sectionId, $phone, $email, $status);
+            $stmt = $mysqli->prepare('INSERT INTO teachers (teacher_id, first_name, last_name, subject, section_id, phone, email, photo, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())');
+            $stmt->bind_param('ssssissss', $teacherId, $firstName, $lastName, $subject, $sectionId, $phone, $email, $photo, $status);
             $stmt->execute();
             $stmt->close();
-            flash('Teacher added successfully.', 'success');
+            $newTeacherId = $mysqli->insert_id;
+            $plainPassword = '';
+            $userId = createUserAccountFor($mysqli, 'teacher', $teacherId, $email, $plainPassword);
+            if ($userId) {
+                $stmt = $mysqli->prepare('UPDATE teachers SET user_id = ? WHERE id = ?');
+                $stmt->bind_param('ii', $userId, $newTeacherId);
+                $stmt->execute();
+                $stmt->close();
+                flashCredentials($teacherId, $plainPassword);
+            } else {
+                flash('Teacher added, but a login account could not be created (email may already be in use). Use "Create Login" to try again.', 'warning');
+            }
         }
         redirect('teachers.php');
     }
     if ($_POST['action'] === 'delete_teacher' && !empty($_POST['teacher_id'])) {
         $tid = intval($_POST['teacher_id']);
+        $stmt = $mysqli->prepare('SELECT user_id FROM teachers WHERE id = ?');
+        $stmt->bind_param('i', $tid);
+        $stmt->execute();
+        $stmt->bind_result($linkedUserId);
+        $stmt->fetch();
+        $stmt->close();
+        if ($linkedUserId) {
+            $stmt = $mysqli->prepare("UPDATE users SET status = 'inactive' WHERE id = ?");
+            $stmt->bind_param('i', $linkedUserId);
+            $stmt->execute();
+            $stmt->close();
+        }
         $stmt = $mysqli->prepare('DELETE FROM teachers WHERE id = ?');
         $stmt->bind_param('i', $tid);
         $stmt->execute();
@@ -42,13 +78,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash('Teacher removed.', 'success');
         redirect('teachers.php');
     }
+    if (in_array($_POST['action'], ['create_teacher_credentials', 'regenerate_teacher_credentials']) && !empty($_POST['teacher_id'])) {
+        $tid = intval($_POST['teacher_id']);
+        $stmt = $mysqli->prepare('SELECT teacher_id, user_id, email FROM teachers WHERE id = ?');
+        $stmt->bind_param('i', $tid);
+        $stmt->execute();
+        $stmt->bind_result($teacherCode, $linkedUserId, $teacherEmail);
+        if ($stmt->fetch()) {
+            $stmt->close();
+            $plainPassword = '';
+            if ($linkedUserId) {
+                regenerateCredentials($mysqli, $linkedUserId, $plainPassword);
+                flashCredentials($teacherCode, $plainPassword);
+            } else {
+                $userId = createUserAccountFor($mysqli, 'teacher', $teacherCode, $teacherEmail, $plainPassword);
+                if ($userId) {
+                    $stmt2 = $mysqli->prepare('UPDATE teachers SET user_id = ? WHERE id = ?');
+                    $stmt2->bind_param('ii', $userId, $tid);
+                    $stmt2->execute();
+                    $stmt2->close();
+                    flashCredentials($teacherCode, $plainPassword);
+                } else {
+                    flash('Unable to create a login account (email may already be in use).', 'danger');
+                }
+            }
+        } else {
+            $stmt->close();
+        }
+        redirect('teachers.php');
+    }
 }
 $courses = $mysqli->query('SELECT id, code FROM courses ORDER BY code');
 $sections = $mysqli->query('SELECT id, section_name FROM sections ORDER BY section_name');
 $teachers = $mysqli->query('SELECT t.*, sec.section_name FROM teachers t LEFT JOIN sections sec ON t.section_id = sec.id ORDER BY t.created_at DESC');
+$newCredentials = flashCredentialsMessage();
 require_once __DIR__ . '/../includes/header.php';
 require_once __DIR__ . '/../includes/admin_nav.php';
 ?>
+<?php if ($newCredentials): ?>
+    <div class="alert alert-success rounded-4">
+        <strong>Login credentials generated.</strong> Share these with the teacher now — the password will not be shown again.
+        <div class="mt-2">
+            <span class="me-3">Username: <code id="credUsername"><?php echo htmlspecialchars($newCredentials['username']); ?></code></span>
+            <span>Password: <code id="credPassword"><?php echo htmlspecialchars($newCredentials['password']); ?></code></span>
+        </div>
+    </div>
+<?php endif; ?>
 <div class="card rounded-4 shadow-sm p-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h4>Teacher Management</h4>
@@ -76,6 +151,12 @@ require_once __DIR__ . '/../includes/admin_nav.php';
                         <td><?php echo badgeStatus($row['status']); ?></td>
                         <td>
                             <button class="btn btn-sm btn-outline-primary btn-edit-teacher" data-data='<?php echo json_encode($row); ?>'>Edit</button>
+                            <form method="post" class="d-inline-block" onsubmit="return confirm('<?php echo $row['user_id'] ? 'Reset this teacher\'s password?' : 'Create a login for this teacher?'; ?>');">
+                                <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
+                                <input type="hidden" name="action" value="<?php echo $row['user_id'] ? 'regenerate_teacher_credentials' : 'create_teacher_credentials'; ?>">
+                                <input type="hidden" name="teacher_id" value="<?php echo $row['id']; ?>">
+                                <button class="btn btn-sm btn-outline-secondary"><?php echo $row['user_id'] ? 'Reset Password' : 'Create Login'; ?></button>
+                            </form>
                             <form method="post" class="d-inline-block" onsubmit="return confirm('Delete this teacher?');">
                                 <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
                                 <input type="hidden" name="action" value="delete_teacher">
@@ -98,7 +179,7 @@ require_once __DIR__ . '/../includes/admin_nav.php';
                 <h5 class="modal-title">Teacher Details</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form method="post">
+            <form method="post" enctype="multipart/form-data">
                 <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
                 <input type="hidden" name="action" value="save_teacher">
                 <input type="hidden" name="id" id="teacherIdField">
@@ -142,6 +223,10 @@ require_once __DIR__ . '/../includes/admin_nav.php';
                             <option value="active">Active</option>
                             <option value="inactive">Inactive</option>
                         </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Photo</label>
+                        <input type="file" class="form-control" name="photo" accept="image/*">
                     </div>
                 </div>
                 <div class="modal-footer">

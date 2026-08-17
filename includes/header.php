@@ -17,7 +17,9 @@ $rootPrefix = ($scriptDir === $projectRoot) ? '' : '../';
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/datatables/1.13.6/css/dataTables.bootstrap5.min.css" />
-    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="<?php echo $rootPrefix; ?>assets/css/theme-tokens.css">
+    <link rel="stylesheet" href="<?php echo $rootPrefix; ?>assets/css/style.css">
+    <link rel="stylesheet" href="<?php echo $rootPrefix; ?>assets/css/dashboard-theme.css">
 </head>
 <body class="bg-light">
 <header class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top shadow-sm">

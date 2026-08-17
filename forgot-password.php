@@ -26,6 +26,7 @@ $schoolName = getSetting('school_name', 'Dr. Francisco L. Calingasan Memorial Co
     <title>Forgot Password | TimeTrack</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+    <link rel="stylesheet" href="assets/css/theme-tokens.css">
     <link rel="stylesheet" href="assets/css/landing.css">
 </head>
 <body class="landing-body">
@@ -55,21 +56,6 @@ $schoolName = getSetting('school_name', 'Dr. Francisco L. Calingasan Memorial Co
                 <a href="landing.php#features" class="lp-nav-link">
                     <i class="fa-solid fa-table-cells"></i>
                     <span>Features</span>
-                </a>
-                <span class="lp-nav-divider"></span>
-                <a href="landing.php#benefits" class="lp-nav-link">
-                    <i class="fa-solid fa-shield-halved"></i>
-                    <span>Benefits</span>
-                </a>
-                <span class="lp-nav-divider"></span>
-                <a href="landing.php#about" class="lp-nav-link">
-                    <i class="fa-solid fa-circle-info"></i>
-                    <span>About</span>
-                </a>
-                <span class="lp-nav-divider"></span>
-                <a href="landing.php#contact" class="lp-nav-link">
-                    <i class="fa-solid fa-phone"></i>
-                    <span>Contact</span>
                 </a>
             </div>
         </div>

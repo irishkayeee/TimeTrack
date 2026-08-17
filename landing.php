@@ -16,6 +16,7 @@ $openLogin = isset($_GET['login']);
     <title>TimeTrack | <?php echo htmlspecialchars($schoolName); ?></title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+    <link rel="stylesheet" href="assets/css/theme-tokens.css">
     <link rel="stylesheet" href="assets/css/landing.css">
 </head>
 <body class="landing-body">

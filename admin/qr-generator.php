@@ -17,37 +17,6 @@ $qrImageExists = false;
 $qrGenerationError = '';
 $qrDirectory = __DIR__ . '/../qrcodes/';
 
-function ensureQrDirectory($directory) {
-    if (!is_dir($directory)) {
-        return mkdir($directory, 0755, true);
-    }
-    return is_writable($directory);
-}
-
-function isValidPngFile($filePath) {
-    if (!file_exists($filePath) || !is_readable($filePath)) {
-        return false;
-    }
-    $handle = fopen($filePath, 'rb');
-    if (!$handle) {
-        return false;
-    }
-    $signature = fread($handle, 8);
-    fclose($handle);
-    return $signature === "\x89PNG\x0D\x0A\x1A\x0A";
-}
-
-function generateStudentQrFile($text, $filePath) {
-    require_once __DIR__ . '/../phpqrcode/qrlib.php';
-    if (!is_dir(dirname($filePath)) && !mkdir(dirname($filePath), 0755, true)) {
-        return false;
-    }
-    if (file_exists($filePath) && !isValidPngFile($filePath)) {
-        @unlink($filePath);
-    }
-    return QRcode::png($text, $filePath, 'H', 8, 2);
-}
-
 if (!empty($_GET['student_id'])) {
     $sid = intval($_GET['student_id']);
     $stmt = $mysqli->prepare('SELECT student_id, qr_code, first_name, last_name FROM students WHERE id = ? LIMIT 1');

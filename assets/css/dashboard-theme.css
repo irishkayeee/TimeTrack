@@ -1,0 +1,28 @@
+.btn-primary {
+    --bs-btn-bg: var(--lp-dark-green);
+    --bs-btn-border-color: var(--lp-dark-green);
+    --bs-btn-hover-bg: var(--lp-mid-green);
+    --bs-btn-hover-border-color: var(--lp-mid-green);
+    --bs-btn-active-bg: var(--lp-deep-green);
+    --bs-btn-active-border-color: var(--lp-deep-green);
+}
+
+.btn-outline-primary {
+    --bs-btn-color: var(--lp-dark-green);
+    --bs-btn-border-color: var(--lp-dark-green);
+    --bs-btn-hover-bg: var(--lp-dark-green);
+    --bs-btn-hover-border-color: var(--lp-dark-green);
+    --bs-btn-active-bg: var(--lp-dark-green);
+    --bs-btn-active-border-color: var(--lp-dark-green);
+}
+
+.list-group-item-action.active,
+.list-group-item-action:hover {
+    background: var(--lp-pale-green);
+    color: var(--lp-dark-green);
+}
+
+.list-group-item-action.active {
+    font-weight: 600;
+    border-inline-start: 3px solid var(--lp-mid-green);
+}

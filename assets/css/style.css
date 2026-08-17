@@ -1,5 +1,5 @@
 body {
-    background: radial-gradient(circle at top left, rgba(255,255,255,0.95), rgba(232,240,255,0.95) 35%, #eef5ff 100%);
+    background: radial-gradient(circle at top left, rgba(255,255,255,0.95), rgba(234,250,241,0.95) 35%, #eafaf1 100%);
     min-height: 100vh;
     color: #222;
     font-family: 'Inter', sans-serif;
@@ -17,7 +17,7 @@ main.container-fluid {
     border-radius: 1rem;
 }
 .navbar {
-    background: linear-gradient(90deg, #0d6efd 0%, #5c7cfa 100%) !important;
+    background: var(--lp-dark-green) !important;
 }
 .card.rounded-4 {
     border-radius: 1.6rem !important;

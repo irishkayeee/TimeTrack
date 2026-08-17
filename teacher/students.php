@@ -1,7 +1,25 @@
 <?php
 require_once __DIR__ . '/../includes/functions.php';
-requireRole(['admin', 'superadmin']);
-$pageTitle = 'Manage Students';
+requireRole(['teacher']);
+$pageTitle = 'My Students';
+
+$teacherId = currentTeacherId();
+if ($teacherId === false) {
+    flash('Your teacher profile is not set up. Contact an administrator.', 'danger');
+    redirect('../dashboard.php');
+}
+
+$sectionStmt = $mysqli->prepare('SELECT DISTINCT sec.id, sec.section_name, sec.year_level FROM subjects sub JOIN sections sec ON sub.section_id = sec.id WHERE sub.teacher_id = ? ORDER BY sec.section_name');
+$sectionStmt->bind_param('i', $teacherId);
+$sectionStmt->execute();
+$sectionResult = $sectionStmt->get_result();
+$allowedSections = [];
+$sectionRows = [];
+while ($row = $sectionResult->fetch_assoc()) {
+    $allowedSections[] = (int) $row['id'];
+    $sectionRows[] = $row;
+}
+$sectionStmt->close();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verifyCsrf($_POST['csrf_token'] ?? '')) {
@@ -9,7 +27,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('students.php');
     }
     if ($_POST['action'] === 'save_student') {
-        $result = saveStudentRecord($mysqli, $_POST, $_FILES, null);
+        $result = saveStudentRecord($mysqli, $_POST, $_FILES, $allowedSections);
         if ($result['credentials']) {
             flashCredentials($result['credentials']['username'], $result['credentials']['password']);
         } else {
@@ -19,17 +37,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($_POST['action'] === 'delete_student' && !empty($_POST['student_id'])) {
         $sid = intval($_POST['student_id']);
-        deleteStudentRecord($mysqli, $sid, null);
-        flash('Student record deleted.', 'success');
+        if (deleteStudentRecord($mysqli, $sid, $allowedSections)) {
+            flash('Student record deleted.', 'success');
+        } else {
+            flash('You can only manage students in your own sections.', 'danger');
+        }
         redirect('students.php');
     }
     if (in_array($_POST['action'], ['create_student_credentials', 'regenerate_student_credentials']) && !empty($_POST['student_id'])) {
         $sid = intval($_POST['student_id']);
-        $stmt = $mysqli->prepare('SELECT student_id, user_id, email FROM students WHERE id = ?');
+        $stmt = $mysqli->prepare('SELECT student_id, user_id, email, section_id FROM students WHERE id = ?');
         $stmt->bind_param('i', $sid);
         $stmt->execute();
-        $stmt->bind_result($studentCode, $linkedUserId, $studentEmail);
-        if ($stmt->fetch()) {
+        $stmt->bind_result($studentCode, $linkedUserId, $studentEmail, $studentSectionId);
+        if ($stmt->fetch() && in_array((int) $studentSectionId, $allowedSections)) {
             $stmt->close();
             $plainPassword = '';
             if ($linkedUserId) {
@@ -49,62 +70,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         } else {
             $stmt->close();
+            flash('You can only manage students in your own sections.', 'danger');
         }
         redirect('students.php');
-    }
-    if ($_POST['action'] === 'import_students' && !empty($_FILES['csv_file']['tmp_name'])) {
-        $file = fopen($_FILES['csv_file']['tmp_name'], 'r');
-        $row = 0;
-        while (($data = fgetcsv($file, 1000, ',')) !== false) {
-            $row++;
-            if ($row === 1) {
-                continue;
-            }
-            $studentId = sanitize($data[0] ?? '');
-            $firstName = sanitize($data[1] ?? '');
-            $lastName = sanitize($data[2] ?? '');
-            $gender = sanitize($data[3] ?? '');
-            $birthday = sanitize($data[4] ?? '');
-            $courseId = intval($data[5] ?? 0);
-            $yearLevel = sanitize($data[6] ?? '');
-            $sectionId = intval($data[7] ?? 0);
-            $guardian = sanitize($data[8] ?? '');
-            $phone = sanitize($data[9] ?? '');
-            $email = sanitize($data[10] ?? '');
-            $status = sanitize($data[11] ?? 'active');
-            if (!$studentId) {
-                $studentId = 'S' . time() . rand(10,99);
-            }
-            $qrToken = $studentId;
-            $stmt = $mysqli->prepare('INSERT INTO students (student_id, first_name, last_name, gender, birthday, course_id, year_level, section_id, guardian_name, phone, email, status, qr_code, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())');
-            $stmt->bind_param('sssssiissssss', $studentId, $firstName, $lastName, $gender, $birthday, $courseId, $yearLevel, $sectionId, $guardian, $phone, $email, $status, $qrToken);
-            $stmt->execute();
-            $stmt->close();
-        }
-        fclose($file);
-        flash('Student list imported successfully.', 'success');
-        redirect('students.php');
-    }
-    if ($_POST['action'] === 'export_students') {
-        header('Content-Type: text/csv');
-        header('Content-Disposition: attachment; filename="students_export_' . date('Ymd') . '.csv"');
-        $output = fopen('php://output', 'w');
-        fputcsv($output, ['Student ID','First Name','Last Name','Gender','Birthday','Course ID','Year Level','Section ID','Guardian','Phone','Email','Status']);
-        $result = $mysqli->query('SELECT student_id, first_name, last_name, gender, birthday, course_id, year_level, section_id, guardian_name, phone, email, status FROM students');
-        while ($row = $result->fetch_assoc()) {
-            fputcsv($output, $row);
-        }
-        fclose($output);
-        exit;
     }
 }
 
-$courses = $mysqli->query('SELECT id, code, name FROM courses ORDER BY name');
-$sections = $mysqli->query('SELECT id, section_name FROM sections ORDER BY section_name');
-$students = $mysqli->query('SELECT s.*, c.code AS course_code, sec.section_name FROM students s LEFT JOIN courses c ON s.course_id = c.id LEFT JOIN sections sec ON s.section_id = sec.id ORDER BY s.created_at DESC');
 $newCredentials = flashCredentialsMessage();
+$courses = $mysqli->query('SELECT id, code, name FROM courses ORDER BY name');
+$students = [];
+if ($allowedSections) {
+    $placeholders = implode(',', array_fill(0, count($allowedSections), '?'));
+    $types = str_repeat('i', count($allowedSections));
+    $stmt = $mysqli->prepare("SELECT s.*, c.code AS course_code, sec.section_name FROM students s LEFT JOIN courses c ON s.course_id = c.id LEFT JOIN sections sec ON s.section_id = sec.id WHERE s.section_id IN ($placeholders) ORDER BY s.created_at DESC");
+    $stmt->bind_param($types, ...$allowedSections);
+    $stmt->execute();
+    $students = $stmt->get_result();
+}
 require_once __DIR__ . '/../includes/header.php';
-require_once __DIR__ . '/../includes/admin_nav.php';
+require_once __DIR__ . '/../includes/teacher_nav.php';
 ?>
 <?php if ($newCredentials): ?>
     <div class="alert alert-success rounded-4">
@@ -117,11 +101,16 @@ require_once __DIR__ . '/../includes/admin_nav.php';
 <?php endif; ?>
 <div class="card rounded-4 shadow-sm p-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h4>Student Management</h4>
-        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#studentModal">Add Student</button>
+        <h4>My Students</h4>
+        <?php if ($allowedSections): ?>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#studentModal">Add Student</button>
+        <?php endif; ?>
     </div>
+    <?php if (!$allowedSections): ?>
+        <div class="alert alert-info">You have no assigned subjects yet, so there are no students to manage. Ask an admin to assign you a subject.</div>
+    <?php else: ?>
     <div class="table-responsive">
-        <table class="table table-hover" id="studentsTable">
+        <table class="table table-hover" id="myStudentsTable">
             <thead class="table-light">
                 <tr>
                     <th>QR</th>
@@ -136,7 +125,7 @@ require_once __DIR__ . '/../includes/admin_nav.php';
             <tbody>
                 <?php while ($row = $students->fetch_assoc()): ?>
                     <tr>
-                        <td><a href="qr-generator.php?student_id=<?php echo $row['id']; ?>" class="btn btn-sm btn-outline-secondary">QR</a></td>
+                        <td><a href="../admin/qr-generator.php?student_id=<?php echo $row['id']; ?>" class="btn btn-sm btn-outline-secondary">QR</a></td>
                         <td><?php echo htmlspecialchars($row['student_id']); ?></td>
                         <td><?php echo htmlspecialchars($row['first_name'] . ' ' . $row['last_name']); ?></td>
                         <td><?php echo htmlspecialchars($row['course_code']); ?></td>
@@ -162,27 +151,7 @@ require_once __DIR__ . '/../includes/admin_nav.php';
             </tbody>
         </table>
     </div>
-    <div class="row mt-4">
-        <div class="col-md-6">
-            <form method="post" enctype="multipart/form-data" class="card rounded-4 p-3 shadow-sm">
-                <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
-                <input type="hidden" name="action" value="import_students">
-                <h6>Import Students CSV</h6>
-                <div class="mb-3">
-                    <input type="file" class="form-control" name="csv_file" accept=".csv" required>
-                </div>
-                <button class="btn btn-success">Upload CSV</button>
-            </form>
-        </div>
-        <div class="col-md-6">
-            <form method="post" class="card rounded-4 p-3 shadow-sm">
-                <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
-                <input type="hidden" name="action" value="export_students">
-                <h6>Export Students</h6>
-                <button class="btn btn-outline-primary">Download CSV</button>
-            </form>
-        </div>
-    </div>
+    <?php endif; ?>
 </div>
 </div>
 </div>
@@ -250,10 +219,9 @@ require_once __DIR__ . '/../includes/admin_nav.php';
                     <div class="col-md-6">
                         <label class="form-label">Section</label>
                         <select class="form-select" name="section_id" id="sectionField">
-                            <option value="0">Unassigned</option>
-                            <?php while ($section = $sections->fetch_assoc()): ?>
-                                <option value="<?php echo $section['id']; ?>"><?php echo htmlspecialchars($section['section_name']); ?></option>
-                            <?php endwhile; ?>
+                            <?php foreach ($sectionRows as $section): ?>
+                                <option value="<?php echo $section['id']; ?>"><?php echo htmlspecialchars($section['year_level'] . ' - ' . $section['section_name']); ?></option>
+                            <?php endforeach; ?>
                         </select>
                     </div>
                     <div class="col-md-6">
@@ -300,7 +268,7 @@ editButtons.forEach(btn => {
 });
 
 document.addEventListener('DOMContentLoaded', () => {
-    $('#studentsTable').DataTable({ responsive: true });
+    $('#myStudentsTable').DataTable({ responsive: true });
 });
 </script>
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>

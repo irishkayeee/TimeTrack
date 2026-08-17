@@ -19,4 +19,7 @@ $user = currentUser();
 if ($user['role'] === 'teacher') {
     redirect('teacher/dashboard.php');
 }
+if ($user['role'] === 'student') {
+    redirect('student/dashboard.php');
+}
 redirect('admin/dashboard.php');
