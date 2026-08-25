@@ -82,22 +82,5 @@ if (($adminUser['role'] ?? '') === 'superadmin') {
                 </div>
             </div>
         </header>
-        <?php $flash = flashMessage(); if ($flash): ?>
-        <div class="sp-flash-overlay" id="spFlashOverlay">
-            <div class="sp-flash-card sp-flash-<?php echo htmlspecialchars($flash['type']); ?>">
-                <i class="fa-solid <?php echo $flash['type'] === 'success' ? 'fa-circle-check' : ($flash['type'] === 'danger' ? 'fa-circle-exclamation' : 'fa-circle-info'); ?>"></i>
-                <span><?php echo htmlspecialchars($flash['message']); ?></span>
-                <button type="button" class="sp-flash-close" onclick="spDismissFlash()" aria-label="Close">&times;</button>
-            </div>
-        </div>
-        <script>
-            function spDismissFlash() {
-                var el = document.getElementById('spFlashOverlay');
-                if (!el) return;
-                el.classList.add('sp-flash-hide');
-                setTimeout(function () { el.remove(); }, 400);
-            }
-            setTimeout(spDismissFlash, 5000);
-        </script>
-        <?php endif; ?>
+        <?php $flash = flashMessage(); ?>
         <main class="sp-content">

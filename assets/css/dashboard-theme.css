@@ -113,6 +113,12 @@
     font-size: 0.9rem;
 }
 
-.card > .d-flex > h4 {
-    font-size: 1.5rem;
+.card h4 {
+    font-size: 1.5rem !important;
+}
+
+.status-badge {
+    display: inline-block;
+    width: 80px;
+    text-align: center;
 }

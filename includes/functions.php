@@ -185,7 +185,7 @@ function badgeStatus($status) {
         'excused' => 'info'
     ];
     $class = isset($classes[$status]) ? $classes[$status] : 'secondary';
-    return '<span class="badge bg-' . $class . '">' . ucfirst($status) . '</span>';
+    return '<span class="badge status-badge bg-' . $class . '">' . ucfirst($status) . '</span>';
 }
 
 function logActivity($userId, $action) {

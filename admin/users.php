@@ -84,11 +84,11 @@ require_once __DIR__ . '/../includes/admin_header.php';
                             <div class="d-flex align-items-center gap-1">
                                 <button class="btn btn-sm btn-outline-secondary btn-icon btn-view-user" data-data='<?php echo json_encode($row); ?>' title="View"><i class="fa-solid fa-eye"></i></button>
                                 <button class="btn btn-sm btn-outline-primary btn-icon btn-edit-user" data-data='<?php echo json_encode($row); ?>' title="Edit"><i class="fa-solid fa-pen"></i></button>
-                                <form method="post" class="d-inline-block" onsubmit="return confirm('Delete this user?');">
+                                <form method="post" class="d-inline-block">
                                     <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
                                     <input type="hidden" name="action" value="delete_user">
                                     <input type="hidden" name="user_id" value="<?php echo $row['id']; ?>">
-                                    <button class="btn btn-sm btn-outline-danger btn-icon" title="Delete"><i class="fa-solid fa-trash"></i></button>
+                                    <button type="button" class="btn btn-sm btn-outline-danger btn-icon js-confirm-submit" data-message="Delete this user?" title="Delete"><i class="fa-solid fa-trash"></i></button>
                                 </form>
                             </div>
                         </td>

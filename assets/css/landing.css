@@ -419,7 +419,7 @@ body.landing-body {
     display: flex;
     align-items: stretch;
     gap: 0.75rem;
-    margin-bottom: 3rem;
+    margin-bottom: 1.25rem;
 }
 
 .lp-step-card {
@@ -504,7 +504,7 @@ body.landing-body {
 .lp-cta {
     position: relative;
     text-align: center;
-    padding: 4rem 1rem 1rem;
+    padding: 1.5rem 1rem 1rem;
 }
 
 

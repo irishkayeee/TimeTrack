@@ -136,6 +136,7 @@ require_once __DIR__ . '/../includes/admin_header.php';
         <table class="table table-hover" id="studentsTable">
             <thead class="table-light">
                 <tr>
+                    <th>Photo</th>
                     <th>ID</th>
                     <th>Name</th>
                     <th>Course</th>
@@ -148,6 +149,13 @@ require_once __DIR__ . '/../includes/admin_header.php';
             <tbody>
                 <?php while ($row = $students->fetch_assoc()): ?>
                     <tr>
+                        <td>
+                            <?php if (!empty($row['photo'])): ?>
+                                <img src="../<?php echo htmlspecialchars($row['photo']); ?>" class="table-avatar" alt="">
+                            <?php else: ?>
+                                <span class="table-avatar table-avatar-fallback"><i class="fa-solid fa-user"></i></span>
+                            <?php endif; ?>
+                        </td>
                         <td><?php echo htmlspecialchars($row['student_id']); ?></td>
                         <td><?php echo htmlspecialchars($row['first_name'] . ' ' . $row['last_name']); ?></td>
                         <td><?php echo htmlspecialchars($row['course_code']); ?></td>

@@ -418,17 +418,17 @@ require_once __DIR__ . '/../includes/admin_header.php';
                                 <td>
                                     <div class="d-flex align-items-center gap-1">
                                         <button class="btn btn-sm btn-outline-primary btn-icon btn-edit" data-data='<?php echo json_encode($row); ?>' title="Edit"><i class="fa-solid fa-pen"></i></button>
-                                        <form method="post" class="d-inline-block" onsubmit="return confirm('Delete this student?');">
+                                        <form method="post" class="d-inline-block">
                                             <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
                                             <input type="hidden" name="action" value="delete_student">
                                             <input type="hidden" name="student_id" value="<?php echo $row['id']; ?>">
-                                            <button class="btn btn-sm btn-outline-danger btn-icon" title="Delete"><i class="fa-solid fa-trash"></i></button>
+                                            <button type="button" class="btn btn-sm btn-outline-danger btn-icon js-confirm-submit" data-message="Delete this student?" title="Delete"><i class="fa-solid fa-trash"></i></button>
                                         </form>
-                                        <form method="post" class="d-inline-block" onsubmit="return confirm('<?php echo $row['user_id'] ? 'Reset this student\'s password?' : 'Create a login for this student?'; ?>');">
+                                        <form method="post" class="d-inline-block">
                                             <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
                                             <input type="hidden" name="action" value="<?php echo $row['user_id'] ? 'regenerate_student_credentials' : 'create_student_credentials'; ?>">
                                             <input type="hidden" name="student_id" value="<?php echo $row['id']; ?>">
-                                            <button class="btn btn-sm btn-outline-secondary btn-action"><?php echo $row['user_id'] ? 'Reset Password' : 'Create Login'; ?></button>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary btn-action js-confirm-submit" data-message="<?php echo $row['user_id'] ? "Reset this student's password?" : 'Create a login for this student?'; ?>"><?php echo $row['user_id'] ? 'Reset Password' : 'Create Login'; ?></button>
                                         </form>
                                     </div>
                                 </td>
@@ -510,17 +510,17 @@ require_once __DIR__ . '/../includes/admin_header.php';
                                     <div class="d-flex align-items-center gap-1">
                                         <button class="btn btn-sm btn-outline-secondary btn-icon btn-view-teacher" data-data='<?php echo json_encode($row); ?>' title="View"><i class="fa-solid fa-eye"></i></button>
                                         <button class="btn btn-sm btn-outline-primary btn-icon btn-edit-teacher" data-data='<?php echo json_encode($row); ?>' title="Edit"><i class="fa-solid fa-pen"></i></button>
-                                        <form method="post" class="d-inline-block" onsubmit="return confirm('Delete this teacher?');">
+                                        <form method="post" class="d-inline-block">
                                             <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
                                             <input type="hidden" name="action" value="delete_teacher">
                                             <input type="hidden" name="teacher_id" value="<?php echo $row['id']; ?>">
-                                            <button class="btn btn-sm btn-outline-danger btn-icon" title="Delete"><i class="fa-solid fa-trash"></i></button>
+                                            <button type="button" class="btn btn-sm btn-outline-danger btn-icon js-confirm-submit" data-message="Delete this teacher?" title="Delete"><i class="fa-solid fa-trash"></i></button>
                                         </form>
-                                        <form method="post" class="d-inline-block" onsubmit="return confirm('<?php echo $row['user_id'] ? 'Reset this teacher\'s password?' : 'Create a login for this teacher?'; ?>');">
+                                        <form method="post" class="d-inline-block">
                                             <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
                                             <input type="hidden" name="action" value="<?php echo $row['user_id'] ? 'regenerate_teacher_credentials' : 'create_teacher_credentials'; ?>">
                                             <input type="hidden" name="teacher_id" value="<?php echo $row['id']; ?>">
-                                            <button class="btn btn-sm btn-outline-secondary btn-action"><?php echo $row['user_id'] ? 'Reset Password' : 'Create Login'; ?></button>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary btn-action js-confirm-submit" data-message="<?php echo $row['user_id'] ? "Reset this teacher's password?" : 'Create a login for this teacher?'; ?>"><?php echo $row['user_id'] ? 'Reset Password' : 'Create Login'; ?></button>
                                         </form>
                                     </div>
                                 </td>
@@ -552,11 +552,11 @@ require_once __DIR__ . '/../includes/admin_header.php';
                                 <td>
                                     <div class="d-flex align-items-center gap-1">
                                         <button class="btn btn-sm btn-outline-primary btn-icon btn-edit-course" data-data='<?php echo json_encode($row); ?>' title="Edit"><i class="fa-solid fa-pen"></i></button>
-                                        <form method="post" class="d-inline-block" onsubmit="return confirm('Delete this course?');">
+                                        <form method="post" class="d-inline-block">
                                             <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
                                             <input type="hidden" name="action" value="delete_course">
                                             <input type="hidden" name="course_id" value="<?php echo $row['id']; ?>">
-                                            <button class="btn btn-sm btn-outline-danger btn-icon" title="Delete"><i class="fa-solid fa-trash"></i></button>
+                                            <button type="button" class="btn btn-sm btn-outline-danger btn-icon js-confirm-submit" data-message="Delete this course?" title="Delete"><i class="fa-solid fa-trash"></i></button>
                                         </form>
                                     </div>
                                 </td>
@@ -589,11 +589,11 @@ require_once __DIR__ . '/../includes/admin_header.php';
                                 <td>
                                     <div class="d-flex align-items-center gap-1">
                                         <button class="btn btn-sm btn-outline-primary btn-icon btn-edit-section" data-data='<?php echo json_encode($row); ?>' title="Edit"><i class="fa-solid fa-pen"></i></button>
-                                        <form method="post" class="d-inline-block" onsubmit="return confirm('Delete this section?');">
+                                        <form method="post" class="d-inline-block">
                                             <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
                                             <input type="hidden" name="action" value="delete_section">
                                             <input type="hidden" name="section_id" value="<?php echo $row['id']; ?>">
-                                            <button class="btn btn-sm btn-outline-danger btn-icon" title="Delete"><i class="fa-solid fa-trash"></i></button>
+                                            <button type="button" class="btn btn-sm btn-outline-danger btn-icon js-confirm-submit" data-message="Delete this section?" title="Delete"><i class="fa-solid fa-trash"></i></button>
                                         </form>
                                     </div>
                                 </td>
@@ -633,11 +633,11 @@ require_once __DIR__ . '/../includes/admin_header.php';
                                 <td>
                                     <div class="d-flex align-items-center gap-1">
                                         <button class="btn btn-sm btn-outline-primary btn-icon btn-edit-subject" data-data='<?php echo json_encode($row); ?>' title="Edit"><i class="fa-solid fa-pen"></i></button>
-                                        <form method="post" class="d-inline-block" onsubmit="return confirm('Delete this subject?');">
+                                        <form method="post" class="d-inline-block">
                                             <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
                                             <input type="hidden" name="action" value="delete_subject">
                                             <input type="hidden" name="subject_id" value="<?php echo $row['id']; ?>">
-                                            <button class="btn btn-sm btn-outline-danger btn-icon" title="Delete"><i class="fa-solid fa-trash"></i></button>
+                                            <button type="button" class="btn btn-sm btn-outline-danger btn-icon js-confirm-submit" data-message="Delete this subject?" title="Delete"><i class="fa-solid fa-trash"></i></button>
                                         </form>
                                     </div>
                                 </td>
