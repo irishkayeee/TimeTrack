@@ -1,4 +1,5 @@
         </main>
+        <footer class="sp-copyright">&copy; <?php echo date('Y'); ?> TimeTrack. All rights reserved.</footer>
     </div>
 </div>
 

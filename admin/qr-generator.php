@@ -47,8 +47,7 @@ if (!empty($_GET['student_id'])) {
     $stmt->close();
 }
 
-require_once __DIR__ . '/../includes/header.php';
-require_once __DIR__ . '/../includes/admin_nav.php';
+require_once __DIR__ . '/../includes/admin_header.php';
 ?>
 <div class="card rounded-4 shadow-sm p-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
@@ -103,6 +102,4 @@ require_once __DIR__ . '/../includes/admin_nav.php';
         <div class="alert alert-info">Select a student to generate a QR code.</div>
     <?php endif; ?>
 </div>
-</div>
-</div>
-<?php require_once __DIR__ . '/../includes/footer.php'; ?>
+<?php require_once __DIR__ . '/../includes/admin_footer.php'; ?>

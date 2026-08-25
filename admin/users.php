@@ -47,8 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 $users = $mysqli->query('SELECT id, username, email, role, status, created_at FROM users ORDER BY created_at DESC');
-require_once __DIR__ . '/../includes/header.php';
-require_once __DIR__ . '/../includes/admin_nav.php';
+require_once __DIR__ . '/../includes/admin_header.php';
 ?>
 <div class="card rounded-4 shadow-sm p-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
@@ -82,8 +81,6 @@ require_once __DIR__ . '/../includes/admin_nav.php';
             </tbody>
         </table>
     </div>
-</div>
-</div>
 </div>
 <div class="modal fade" id="userModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
@@ -151,4 +148,4 @@ $(document).ready(function () {
     $('#usersTable').DataTable({ responsive: true });
 });
 </script>
-<?php require_once __DIR__ . '/../includes/footer.php'; ?>
+<?php require_once __DIR__ . '/../includes/admin_footer.php'; ?>

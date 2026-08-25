@@ -103,8 +103,7 @@ $courses = $mysqli->query('SELECT id, code, name FROM courses ORDER BY name');
 $sections = $mysqli->query('SELECT id, section_name FROM sections ORDER BY section_name');
 $students = $mysqli->query('SELECT s.*, c.code AS course_code, sec.section_name FROM students s LEFT JOIN courses c ON s.course_id = c.id LEFT JOIN sections sec ON s.section_id = sec.id ORDER BY s.created_at DESC');
 $newCredentials = flashCredentialsMessage();
-require_once __DIR__ . '/../includes/header.php';
-require_once __DIR__ . '/../includes/admin_nav.php';
+require_once __DIR__ . '/../includes/admin_header.php';
 ?>
 <?php if ($newCredentials): ?>
     <div class="alert alert-success rounded-4">
@@ -183,8 +182,6 @@ require_once __DIR__ . '/../includes/admin_nav.php';
             </form>
         </div>
     </div>
-</div>
-</div>
 </div>
 
 <div class="modal fade" id="studentModal" tabindex="-1" aria-hidden="true">
@@ -303,4 +300,4 @@ document.addEventListener('DOMContentLoaded', () => {
     $('#studentsTable').DataTable({ responsive: true });
 });
 </script>
-<?php require_once __DIR__ . '/../includes/footer.php'; ?>
+<?php require_once __DIR__ . '/../includes/admin_footer.php'; ?>

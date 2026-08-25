@@ -68,8 +68,7 @@ if ($isTeacherView) {
     $pageSubtitle = $activeSubject ? 'Scanning for ' . $activeSubject['name'] : 'Select a class to scan attendance for.';
     require_once __DIR__ . '/../includes/teacher_header.php';
 } else {
-    require_once __DIR__ . '/../includes/header.php';
-    require_once __DIR__ . '/../includes/admin_nav.php';
+    require_once __DIR__ . '/../includes/admin_header.php';
 }
 ?>
 <div class="card rounded-4 shadow-sm p-4">
@@ -188,10 +187,6 @@ if ($isTeacherView) {
         </div>
     <?php endif; ?>
 </div>
-<?php if (!$isTeacherView): ?>
-</div>
-</div>
-<?php endif; ?>
 <?php if ($activeSubject): ?>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
@@ -439,4 +434,4 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 </script>
 <?php endif; ?>
-<?php require_once __DIR__ . '/../includes/' . ($isTeacherView ? 'teacher_footer.php' : 'footer.php'); ?>
+<?php require_once __DIR__ . '/../includes/' . ($isTeacherView ? 'teacher_footer.php' : 'admin_footer.php'); ?>

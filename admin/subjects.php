@@ -52,8 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $teachers = $mysqli->query("SELECT id, first_name, last_name FROM teachers WHERE status = 'active' ORDER BY first_name");
 $sections = $mysqli->query('SELECT id, section_name, year_level FROM sections ORDER BY section_name');
 $subjects = $mysqli->query('SELECT sub.*, CONCAT(t.first_name, " ", t.last_name) AS teacher_name, sec.section_name FROM subjects sub LEFT JOIN teachers t ON sub.teacher_id = t.id LEFT JOIN sections sec ON sub.section_id = sec.id ORDER BY sub.created_at DESC');
-require_once __DIR__ . '/../includes/header.php';
-require_once __DIR__ . '/../includes/admin_nav.php';
+require_once __DIR__ . '/../includes/admin_header.php';
 ?>
 <div class="card rounded-4 shadow-sm p-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
@@ -93,8 +92,6 @@ require_once __DIR__ . '/../includes/admin_nav.php';
             </tbody>
         </table>
     </div>
-</div>
-</div>
 </div>
 <div class="modal fade" id="subjectModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
@@ -201,4 +198,4 @@ $(document).ready(function () {
     $('#subjectsTable').DataTable({ responsive: true });
 });
 </script>
-<?php require_once __DIR__ . '/../includes/footer.php'; ?>
+<?php require_once __DIR__ . '/../includes/admin_footer.php'; ?>

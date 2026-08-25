@@ -63,8 +63,7 @@ if ($params) {
 }
 $stmt->execute();
 $attendanceRecords = $stmt->get_result();
-require_once __DIR__ . '/../includes/header.php';
-require_once __DIR__ . '/../includes/admin_nav.php';
+require_once __DIR__ . '/../includes/admin_header.php';
 ?>
 <div class="card rounded-4 shadow-sm p-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
@@ -135,11 +134,9 @@ require_once __DIR__ . '/../includes/admin_nav.php';
         </table>
     </div>
 </div>
-</div>
-</div>
 <script>
 $(document).ready(function () {
     $('#attendanceTable').DataTable({ responsive: true });
 });
 </script>
-<?php require_once __DIR__ . '/../includes/footer.php'; ?>
+<?php require_once __DIR__ . '/../includes/admin_footer.php'; ?>

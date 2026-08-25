@@ -110,7 +110,8 @@ $fullName = trim($teacher['first_name'] . ' ' . $teacher['last_name']);
 
 require_once __DIR__ . '/../includes/teacher_header.php';
 ?>
-<div class="row g-3">
+<div class="d-flex align-items-center" style="min-height: calc(100vh - 150px);">
+<div class="row g-3 mx-auto w-100" style="max-width: 1100px;">
     <div class="col-lg-4">
         <div class="card p-4 text-center h-100 sp-profile-card">
             <div class="sp-profile-photo-wrap mx-auto">
@@ -209,6 +210,7 @@ require_once __DIR__ . '/../includes/teacher_header.php';
             </a>
         </div>
     </div>
+</div>
 </div>
 
 <div class="modal fade" id="changePasswordModal" tabindex="-1" aria-hidden="true">

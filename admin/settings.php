@@ -46,8 +46,7 @@ $lateTime = getSetting('late_time', '08:00');
 $schoolYear = getSetting('school_year', '2025-2026');
 $semester = getSetting('semester', '1st Semester');
 $logo = getSetting('logo', '');
-require_once __DIR__ . '/../includes/header.php';
-require_once __DIR__ . '/../includes/admin_nav.php';
+require_once __DIR__ . '/../includes/admin_header.php';
 ?>
 <div class="card rounded-4 shadow-sm p-4">
     <h4>System Settings</h4>
@@ -91,6 +90,4 @@ require_once __DIR__ . '/../includes/admin_nav.php';
         </div>
     </form>
 </div>
-</div>
-</div>
-<?php require_once __DIR__ . '/../includes/footer.php'; ?>
+<?php require_once __DIR__ . '/../includes/admin_footer.php'; ?>

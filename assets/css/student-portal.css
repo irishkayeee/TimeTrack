@@ -269,12 +269,20 @@ body.student-body {
 
 .sp-content {
     padding: 1.6rem;
+    flex: 1;
 }
 
 .sp-content .card {
     border: none;
     border-radius: 1.25rem;
     box-shadow: 0 16px 40px rgba(15, 36, 79, 0.06);
+}
+
+.sp-copyright {
+    text-align: center;
+    font-size: 0.8rem;
+    color: #8a978f;
+    padding: 1rem 1.6rem 1.4rem;
 }
 
 .sp-stat-icon {
@@ -733,6 +741,12 @@ td.sp-status-excused {
     width: 60%;
     margin: 1.25rem auto;
     border-top: 1px solid #e7ece9;
+}
+
+.sp-qr-owner {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #52625a;
 }
 
 .sp-qr-frame {

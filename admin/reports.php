@@ -9,8 +9,7 @@ $monthly = $mysqli->query("SELECT COUNT(*) FROM attendance WHERE MONTH(date) = M
 $topAbsent = $mysqli->query("SELECT s.first_name, s.last_name, COUNT(*) AS total FROM attendance a JOIN students s ON a.student_id = s.id WHERE a.status = 'absent' GROUP BY a.student_id ORDER BY total DESC LIMIT 5");
 $topLate = $mysqli->query("SELECT s.first_name, s.last_name, COUNT(*) AS total FROM attendance a JOIN students s ON a.student_id = s.id WHERE a.status = 'late' GROUP BY a.student_id ORDER BY total DESC LIMIT 5");
 $perfect = $mysqli->query("SELECT s.first_name, s.last_name, COUNT(*) AS total FROM attendance a JOIN students s ON a.student_id = s.id WHERE a.status = 'present' GROUP BY a.student_id HAVING COUNT(*) >= 5 ORDER BY total DESC LIMIT 5");
-require_once __DIR__ . '/../includes/header.php';
-require_once __DIR__ . '/../includes/admin_nav.php';
+require_once __DIR__ . '/../includes/admin_header.php';
 ?>
 <div class="card rounded-4 shadow-sm p-4">
     <h4>Attendance Reports</h4>
@@ -54,6 +53,4 @@ require_once __DIR__ . '/../includes/admin_nav.php';
         </div>
     </div>
 </div>
-</div>
-</div>
-<?php require_once __DIR__ . '/../includes/footer.php'; ?>
+<?php require_once __DIR__ . '/../includes/admin_footer.php'; ?>

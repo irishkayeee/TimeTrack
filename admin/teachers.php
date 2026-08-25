@@ -112,8 +112,7 @@ $courses = $mysqli->query('SELECT id, code FROM courses ORDER BY code');
 $sections = $mysqli->query('SELECT id, section_name FROM sections ORDER BY section_name');
 $teachers = $mysqli->query('SELECT t.*, sec.section_name FROM teachers t LEFT JOIN sections sec ON t.section_id = sec.id ORDER BY t.created_at DESC');
 $newCredentials = flashCredentialsMessage();
-require_once __DIR__ . '/../includes/header.php';
-require_once __DIR__ . '/../includes/admin_nav.php';
+require_once __DIR__ . '/../includes/admin_header.php';
 ?>
 <?php if ($newCredentials): ?>
     <div class="alert alert-success rounded-4">
@@ -169,8 +168,6 @@ require_once __DIR__ . '/../includes/admin_nav.php';
             </tbody>
         </table>
     </div>
-</div>
-</div>
 </div>
 <div class="modal fade" id="teacherModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered">
@@ -258,4 +255,4 @@ $(document).ready(function () {
     $('#teachersTable').DataTable({ responsive: true });
 });
 </script>
-<?php require_once __DIR__ . '/../includes/footer.php'; ?>
+<?php require_once __DIR__ . '/../includes/admin_footer.php'; ?>

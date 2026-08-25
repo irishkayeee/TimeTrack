@@ -29,7 +29,7 @@ if (preg_match('/^(.+)\|SUBJ(\d+)$/', $qrValue, $matches)) {
         exit;
     }
 }
-$stmt = $mysqli->prepare("SELECT id, section_id, start_time, day_of_week, absent_cutoff_minutes FROM subjects WHERE id = ? AND status = 'active' LIMIT 1");
+$stmt = $mysqli->prepare("SELECT id, name, section_id, start_time, day_of_week, absent_cutoff_minutes FROM subjects WHERE id = ? AND status = 'active' LIMIT 1");
 $stmt->bind_param('i', $subjectId);
 $stmt->execute();
 $subject = $stmt->get_result()->fetch_assoc();
@@ -73,5 +73,10 @@ $stmt = $mysqli->prepare('INSERT INTO attendance (student_id, course_id, section
 $stmt->bind_param('iiiisss', $student['id'], $student['course_id'], $student['section_id'], $subjectId, $status, $status, $scanTime);
 $stmt->execute();
 $stmt->close();
+
+$notifTitles = ['present' => 'Attendance Recorded', 'late' => 'Marked Late', 'absent' => 'Marked Absent'];
+$notifMessage = 'You were marked ' . $status . ' in ' . $subject['name'] . ' today.';
+notifyStudent($student['id'], $status, $notifTitles[$status] ?? 'Attendance Recorded', $notifMessage, $subjectId);
+
 logActivity($_SESSION['user']['id'] ?? 0, 'Scanned QR for student ' . $student['student_id']);
 echo json_encode(['status' => 'success', 'message' => 'Attendance saved.', 'student' => $student, 'statusLabel' => $status]);

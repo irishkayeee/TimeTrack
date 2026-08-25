@@ -1,30 +1,30 @@
 <?php
 $schoolName = getSetting('school_name', 'Attendance Management System');
 $currentPage = basename($_SERVER['PHP_SELF']);
-$studentDbId = currentStudentId();
-$sidebarStudent = null;
-$unreadCount = 0;
-if ($studentDbId !== false) {
-    $sidebarStmt = $mysqli->prepare('SELECT first_name, last_name, photo FROM students WHERE id = ? LIMIT 1');
-    $sidebarStmt->bind_param('i', $studentDbId);
-    $sidebarStmt->execute();
-    $sidebarStudent = $sidebarStmt->get_result()->fetch_assoc();
-    $sidebarStmt->close();
-    $unreadCount = unreadNotificationCount($studentDbId);
-}
+$adminUser = currentUser();
 $navItems = [
     ['href' => 'dashboard.php', 'icon' => 'fa-table-cells', 'label' => 'Dashboard'],
+    ['href' => 'students.php', 'icon' => 'fa-user-graduate', 'label' => 'Students'],
+    ['href' => 'teachers.php', 'icon' => 'fa-chalkboard-user', 'label' => 'Teachers'],
+    ['href' => 'courses.php', 'icon' => 'fa-graduation-cap', 'label' => 'Courses'],
+    ['href' => 'sections.php', 'icon' => 'fa-people-group', 'label' => 'Sections'],
     ['href' => 'subjects.php', 'icon' => 'fa-book', 'label' => 'Subjects'],
-    ['href' => 'notifications.php', 'icon' => 'fa-bell', 'label' => 'Notifications'],
-    ['href' => 'profile.php', 'icon' => 'fa-user', 'label' => 'My Profile'],
+    ['href' => 'attendance.php', 'icon' => 'fa-clipboard-check', 'label' => 'Attendance'],
+    ['href' => 'qr-generator.php', 'icon' => 'fa-qrcode', 'label' => 'QR Generator'],
+    ['href' => 'scanner.php', 'icon' => 'fa-camera', 'label' => 'Scanner'],
+    ['href' => 'reports.php', 'icon' => 'fa-chart-column', 'label' => 'Reports'],
+    ['href' => 'settings.php', 'icon' => 'fa-gear', 'label' => 'Settings'],
 ];
+if (($adminUser['role'] ?? '') === 'superadmin') {
+    $navItems[] = ['href' => 'users.php', 'icon' => 'fa-user-shield', 'label' => 'User Accounts'];
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo htmlspecialchars($pageTitle ?? 'Student Portal'); ?> | <?php echo htmlspecialchars($schoolName); ?></title>
+    <title><?php echo htmlspecialchars($pageTitle ?? 'Admin Portal'); ?> | <?php echo htmlspecialchars($schoolName); ?></title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/datatables/1.13.6/css/dataTables.bootstrap5.min.css" />
@@ -38,7 +38,7 @@ $navItems = [
         <div class="sp-brand">
             <img src="../assets/images/iblogo2.png" alt="TimeTrack logo">
             <div class="sp-brand-name">TimeTrack</div>
-            <div class="sp-brand-sub">Student Portal</div>
+            <div class="sp-brand-sub">Admin Portal</div>
         </div>
         <div class="sp-brand-divider"></div>
         <nav class="sp-nav">
@@ -74,16 +74,11 @@ $navItems = [
                 </div>
             </div>
             <div class="sp-topbar-right">
-                <a href="notifications.php" class="sp-bell"><i class="fa-solid fa-bell"></i><?php if ($unreadCount > 0): ?><span class="sp-dot"></span><?php endif; ?></a>
                 <div class="sp-user">
-                    <?php if ($sidebarStudent && $sidebarStudent['photo']): ?>
-                        <img src="../<?php echo htmlspecialchars($sidebarStudent['photo']); ?>" alt="">
-                    <?php else: ?>
-                        <i class="fa-solid fa-circle-user fa-2x text-secondary"></i>
-                    <?php endif; ?>
+                    <i class="fa-solid fa-circle-user fa-2x text-secondary"></i>
                     <div>
-                        <div class="sp-user-name"><?php echo htmlspecialchars($sidebarStudent ? $sidebarStudent['first_name'] . ' ' . $sidebarStudent['last_name'] : 'Student'); ?></div>
-                        <div class="sp-user-role">Student</div>
+                        <div class="sp-user-name"><?php echo htmlspecialchars($adminUser['username'] ?? 'Admin'); ?></div>
+                        <div class="sp-user-role"><?php echo htmlspecialchars(ucfirst($adminUser['role'] ?? 'admin')); ?></div>
                     </div>
                 </div>
             </div>

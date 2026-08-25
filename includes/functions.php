@@ -117,6 +117,25 @@ function logActivity($userId, $action) {
     $stmt->close();
 }
 
+function notifyStudent($studentId, $type, $title, $message, $subjectId = null) {
+    global $mysqli;
+    $stmt = $mysqli->prepare('INSERT INTO notifications (student_id, subject_id, type, title, message, created_at) VALUES (?, ?, ?, ?, ?, NOW())');
+    $stmt->bind_param('iisss', $studentId, $subjectId, $type, $title, $message);
+    $stmt->execute();
+    $stmt->close();
+}
+
+function unreadNotificationCount($studentId) {
+    global $mysqli;
+    $stmt = $mysqli->prepare('SELECT COUNT(*) FROM notifications WHERE student_id = ? AND is_read = 0');
+    $stmt->bind_param('i', $studentId);
+    $stmt->execute();
+    $stmt->bind_result($count);
+    $stmt->fetch();
+    $stmt->close();
+    return (int) $count;
+}
+
 function createRememberToken($userId) {
     global $mysqli;
     $token = bin2hex(random_bytes(32));

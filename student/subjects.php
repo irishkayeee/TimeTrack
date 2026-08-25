@@ -62,6 +62,19 @@ $stmt->bind_result($myFirstName, $myLastName, $sectionId, $myStudentCode, $myQrC
 $stmt->fetch();
 $stmt->close();
 $myQrToken = $myQrCode ?: $myStudentCode;
+$myFullName = trim($myFirstName . ' ' . $myLastName);
+
+$myCourseYear = '';
+if ($sectionId) {
+    $courseStmt = $mysqli->prepare('SELECT c.code AS course_code, sec.year_level FROM sections sec JOIN courses c ON sec.course_id = c.id WHERE sec.id = ? LIMIT 1');
+    $courseStmt->bind_param('i', $sectionId);
+    $courseStmt->execute();
+    $courseInfo = $courseStmt->get_result()->fetch_assoc();
+    $courseStmt->close();
+    if ($courseInfo) {
+        $myCourseYear = $courseInfo['course_code'] . ' - ' . $courseInfo['year_level'];
+    }
+}
 
 $activeSubjects = [];
 $inactiveSubjects = [];
@@ -80,7 +93,7 @@ if ($sectionId) {
     $stmt->close();
 }
 
-function renderSubjectCard($row, $qrToken) {
+function renderSubjectCard($row, $qrToken, $studentName = '', $studentCourseYear = '') {
     $theme = subjectTheme($row['id']);
 
     $qrText = subjectQrText($qrToken, $row['id']);
@@ -126,7 +139,10 @@ function renderSubjectCard($row, $qrToken) {
                     <div id="qrCard<?php echo $row['id']; ?>" class="sp-qr-card">
                         <span class="sp-shd-pill"><i class="fa-solid fa-book-open"></i> SUBJECT</span>
                         <h2 class="sp-qr-code mt-3 mb-0"><?php echo htmlspecialchars($row['code']); ?></h2>
-                        <p class="text-muted"><?php echo htmlspecialchars($row['name']); ?></p>
+                        <p class="text-muted mb-1"><?php echo htmlspecialchars($row['name']); ?></p>
+                        <?php if ($studentName !== ''): ?>
+                            <p class="sp-qr-owner mb-0"><?php echo htmlspecialchars($studentName); ?><?php echo $studentCourseYear !== '' ? ' &middot; ' . htmlspecialchars($studentCourseYear) : ''; ?></p>
+                        <?php endif; ?>
                         <hr class="sp-qr-divider">
                         <?php if ($qrImageExists): ?>
                             <div class="sp-qr-frame">
@@ -159,7 +175,7 @@ require_once __DIR__ . '/../includes/student_header.php';
     <div class="alert alert-info">No subjects scheduled for your section yet.</div>
 <?php else: ?>
     <div class="row g-3">
-        <?php foreach ($activeSubjects as $row) { renderSubjectCard($row, $myQrToken); } ?>
+        <?php foreach ($activeSubjects as $row) { renderSubjectCard($row, $myQrToken, $myFullName, $myCourseYear); } ?>
     </div>
     <?php if (!empty($inactiveSubjects)): ?>
         <div class="text-center mt-4">
@@ -169,7 +185,7 @@ require_once __DIR__ . '/../includes/student_header.php';
         </div>
         <div class="collapse mt-3" id="inactiveSubjects">
             <div class="row g-3">
-                <?php foreach ($inactiveSubjects as $row) { renderSubjectCard($row, $myQrToken); } ?>
+                <?php foreach ($inactiveSubjects as $row) { renderSubjectCard($row, $myQrToken, $myFullName, $myCourseYear); } ?>
             </div>
         </div>
     <?php endif; ?>
