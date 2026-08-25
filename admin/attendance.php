@@ -86,6 +86,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'export') {
     exit;
 }
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'export_pdf') {
+    $query = 'SELECT s.student_id, s.year_level, CONCAT(s.first_name, " ", s.last_name) AS full_name, c.code AS course_code, sec.section_name, sub.name AS subject_name, a.status, a.date, a.time FROM attendance a LEFT JOIN students s ON a.student_id = s.id LEFT JOIN courses c ON a.course_id = c.id LEFT JOIN sections sec ON a.section_id = sec.id LEFT JOIN subjects sub ON a.subject_id = sub.id WHERE ' . $whereSql . ' ORDER BY a.created_at DESC';
+    $stmt = $mysqli->prepare($query);
+    if ($params) {
+        $stmt->bind_param($types, ...$params);
+    }
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $rows = [];
+    while ($row = $result->fetch_assoc()) {
+        $rows[] = [$row['date'], $row['time'], $row['full_name'], $row['student_id'], $row['course_code'] ?: '-', $row['section_name'] ?: '-', $row['subject_name'] ?: '-', ucfirst($row['status'])];
+    }
+    $pdf = generateSimpleTablePdf('Attendance Records', ['Date', 'Time', 'Student', 'ID', 'Course', 'Section', 'Subject', 'Status'], $rows, [65, 55, 130, 65, 60, 80, 130, 70]);
+    header('Content-Type: application/pdf');
+    header('Content-Disposition: attachment; filename="attendance_export_' . date('Ymd_His') . '.pdf"');
+    header('Content-Length: ' . strlen($pdf));
+    echo $pdf;
+    exit;
+}
+
 $courses = $mysqli->query('SELECT id, code FROM courses ORDER BY code');
 $sections = $mysqli->query('SELECT id, section_name FROM sections ORDER BY section_name');
 $query = 'SELECT a.*, s.student_id, s.photo, s.year_level, CONCAT(s.first_name, " ", s.last_name) AS student_name, c.code AS course_code, sec.section_name, sub.name AS subject_name FROM attendance a LEFT JOIN students s ON a.student_id = s.id LEFT JOIN courses c ON a.course_id = c.id LEFT JOIN sections sec ON a.section_id = sec.id LEFT JOIN subjects sub ON a.subject_id = sub.id WHERE ' . $whereSql . ' ORDER BY a.created_at DESC';
@@ -100,18 +120,32 @@ require_once __DIR__ . '/../includes/admin_header.php';
 <div class="card rounded-4 shadow-sm p-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h4>Attendance Records</h4>
-        <form method="post" class="m-0">
-            <input type="hidden" name="action" value="export">
-            <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
-            <input type="hidden" name="period" value="<?php echo htmlspecialchars($period); ?>">
-            <input type="hidden" name="date" value="<?php echo htmlspecialchars($date); ?>">
-            <input type="hidden" name="date_from" value="<?php echo htmlspecialchars($dateFrom); ?>">
-            <input type="hidden" name="date_to" value="<?php echo htmlspecialchars($dateTo); ?>">
-            <input type="hidden" name="course_id" value="<?php echo htmlspecialchars($courseId); ?>">
-            <input type="hidden" name="section_id" value="<?php echo htmlspecialchars($sectionId); ?>">
-            <input type="hidden" name="student" value="<?php echo htmlspecialchars($studentQuery); ?>">
-            <button type="submit" class="btn btn-outline-success">Export CSV</button>
-        </form>
+        <div class="d-flex gap-2">
+            <form method="post" class="m-0">
+                <input type="hidden" name="action" value="export">
+                <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
+                <input type="hidden" name="period" value="<?php echo htmlspecialchars($period); ?>">
+                <input type="hidden" name="date" value="<?php echo htmlspecialchars($date); ?>">
+                <input type="hidden" name="date_from" value="<?php echo htmlspecialchars($dateFrom); ?>">
+                <input type="hidden" name="date_to" value="<?php echo htmlspecialchars($dateTo); ?>">
+                <input type="hidden" name="course_id" value="<?php echo htmlspecialchars($courseId); ?>">
+                <input type="hidden" name="section_id" value="<?php echo htmlspecialchars($sectionId); ?>">
+                <input type="hidden" name="student" value="<?php echo htmlspecialchars($studentQuery); ?>">
+                <button type="submit" class="btn btn-outline-success">Export CSV</button>
+            </form>
+            <form method="post" class="m-0">
+                <input type="hidden" name="action" value="export_pdf">
+                <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
+                <input type="hidden" name="period" value="<?php echo htmlspecialchars($period); ?>">
+                <input type="hidden" name="date" value="<?php echo htmlspecialchars($date); ?>">
+                <input type="hidden" name="date_from" value="<?php echo htmlspecialchars($dateFrom); ?>">
+                <input type="hidden" name="date_to" value="<?php echo htmlspecialchars($dateTo); ?>">
+                <input type="hidden" name="course_id" value="<?php echo htmlspecialchars($courseId); ?>">
+                <input type="hidden" name="section_id" value="<?php echo htmlspecialchars($sectionId); ?>">
+                <input type="hidden" name="student" value="<?php echo htmlspecialchars($studentQuery); ?>">
+                <button type="submit" class="btn btn-outline-primary">Download PDF</button>
+            </form>
+        </div>
     </div>
     <form method="get" class="d-flex flex-wrap align-items-end gap-3 mb-4">
         <div class="flex-fill" style="min-width: 160px;">

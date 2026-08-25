@@ -25,7 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash('Student record deleted.', 'success');
         redirect('academics.php');
     }
-    if (in_array($_POST['action'], ['create_student_credentials', 'regenerate_student_credentials']) && !empty($_POST['student_id'])) {
+    if ($_POST['action'] === 'create_student_credentials' && !empty($_POST['student_id'])) {
         $sid = intval($_POST['student_id']);
         $stmt = $mysqli->prepare('SELECT student_id, user_id, email FROM students WHERE id = ?');
         $stmt->bind_param('i', $sid);
@@ -33,11 +33,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->bind_result($studentCode, $linkedUserId, $studentEmail);
         if ($stmt->fetch()) {
             $stmt->close();
-            $plainPassword = '';
             if ($linkedUserId) {
-                regenerateCredentials($mysqli, $linkedUserId, $plainPassword);
-                flashCredentials($studentCode, $plainPassword);
+                flash('A login already exists for this student. Password reset is disabled once a login is created.', 'danger');
             } else {
+                $plainPassword = '';
                 $userId = createUserAccountFor($mysqli, 'student', $studentCode, $studentEmail, $plainPassword);
                 if ($userId) {
                     $stmt2 = $mysqli->prepare('UPDATE students SET user_id = ? WHERE id = ?');
@@ -171,7 +170,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash('Teacher removed.', 'success');
         redirect('academics.php');
     }
-    if (in_array($_POST['action'], ['create_teacher_credentials', 'regenerate_teacher_credentials']) && !empty($_POST['teacher_id'])) {
+    if ($_POST['action'] === 'create_teacher_credentials' && !empty($_POST['teacher_id'])) {
         $tid = intval($_POST['teacher_id']);
         $stmt = $mysqli->prepare('SELECT teacher_id, user_id, email FROM teachers WHERE id = ?');
         $stmt->bind_param('i', $tid);
@@ -179,11 +178,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->bind_result($teacherCode, $linkedUserId, $teacherEmail);
         if ($stmt->fetch()) {
             $stmt->close();
-            $plainPassword = '';
             if ($linkedUserId) {
-                regenerateCredentials($mysqli, $linkedUserId, $plainPassword);
-                flashCredentials($teacherCode, $plainPassword);
+                flash('A login already exists for this teacher. Password reset is disabled once a login is created.', 'danger');
             } else {
+                $plainPassword = '';
                 $userId = createUserAccountFor($mysqli, 'teacher', $teacherCode, $teacherEmail, $plainPassword);
                 if ($userId) {
                     $stmt2 = $mysqli->prepare('UPDATE teachers SET user_id = ? WHERE id = ?');
@@ -424,12 +422,14 @@ require_once __DIR__ . '/../includes/admin_header.php';
                                             <input type="hidden" name="student_id" value="<?php echo $row['id']; ?>">
                                             <button type="button" class="btn btn-sm btn-outline-danger btn-icon js-confirm-submit" data-message="Delete this student?" title="Delete"><i class="fa-solid fa-trash"></i></button>
                                         </form>
-                                        <form method="post" class="d-inline-block">
-                                            <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
-                                            <input type="hidden" name="action" value="<?php echo $row['user_id'] ? 'regenerate_student_credentials' : 'create_student_credentials'; ?>">
-                                            <input type="hidden" name="student_id" value="<?php echo $row['id']; ?>">
-                                            <button type="button" class="btn btn-sm btn-outline-secondary btn-action js-confirm-submit" data-message="<?php echo $row['user_id'] ? "Reset this student's password?" : 'Create a login for this student?'; ?>"><?php echo $row['user_id'] ? 'Reset Password' : 'Create Login'; ?></button>
-                                        </form>
+                                        <?php if (!$row['user_id']): ?>
+                                            <form method="post" class="d-inline-block">
+                                                <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
+                                                <input type="hidden" name="action" value="create_student_credentials">
+                                                <input type="hidden" name="student_id" value="<?php echo $row['id']; ?>">
+                                                <button type="button" class="btn btn-sm btn-outline-secondary btn-action js-confirm-submit" data-message="Create a login for this student?">Create Login</button>
+                                            </form>
+                                        <?php endif; ?>
                                     </div>
                                 </td>
                             </tr>
@@ -516,12 +516,14 @@ require_once __DIR__ . '/../includes/admin_header.php';
                                             <input type="hidden" name="teacher_id" value="<?php echo $row['id']; ?>">
                                             <button type="button" class="btn btn-sm btn-outline-danger btn-icon js-confirm-submit" data-message="Delete this teacher?" title="Delete"><i class="fa-solid fa-trash"></i></button>
                                         </form>
-                                        <form method="post" class="d-inline-block">
-                                            <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
-                                            <input type="hidden" name="action" value="<?php echo $row['user_id'] ? 'regenerate_teacher_credentials' : 'create_teacher_credentials'; ?>">
-                                            <input type="hidden" name="teacher_id" value="<?php echo $row['id']; ?>">
-                                            <button type="button" class="btn btn-sm btn-outline-secondary btn-action js-confirm-submit" data-message="<?php echo $row['user_id'] ? "Reset this teacher's password?" : 'Create a login for this teacher?'; ?>"><?php echo $row['user_id'] ? 'Reset Password' : 'Create Login'; ?></button>
-                                        </form>
+                                        <?php if (!$row['user_id']): ?>
+                                            <form method="post" class="d-inline-block">
+                                                <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
+                                                <input type="hidden" name="action" value="create_teacher_credentials">
+                                                <input type="hidden" name="teacher_id" value="<?php echo $row['id']; ?>">
+                                                <button type="button" class="btn btn-sm btn-outline-secondary btn-action js-confirm-submit" data-message="Create a login for this teacher?">Create Login</button>
+                                            </form>
+                                        <?php endif; ?>
                                     </div>
                                 </td>
                             </tr>

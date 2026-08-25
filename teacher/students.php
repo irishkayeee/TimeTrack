@@ -60,7 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         redirect('students.php');
     }
-    if (in_array($_POST['action'], ['create_student_credentials', 'regenerate_student_credentials']) && !empty($_POST['student_id'])) {
+    if ($_POST['action'] === 'create_student_credentials' && !empty($_POST['student_id'])) {
         $sid = intval($_POST['student_id']);
         $stmt = $mysqli->prepare('SELECT student_id, user_id, email, section_id FROM students WHERE id = ?');
         $stmt->bind_param('i', $sid);
@@ -68,11 +68,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->bind_result($studentCode, $linkedUserId, $studentEmail, $studentSectionId);
         if ($stmt->fetch() && in_array((int) $studentSectionId, $allowedSections)) {
             $stmt->close();
-            $plainPassword = '';
             if ($linkedUserId) {
-                regenerateCredentials($mysqli, $linkedUserId, $plainPassword);
-                flashCredentials($studentCode, $plainPassword);
+                flash('A login already exists for this student. Password reset is disabled once a login is created.', 'danger');
             } else {
+                $plainPassword = '';
                 $userId = createUserAccountFor($mysqli, 'student', $studentCode, $studentEmail, $plainPassword);
                 if ($userId) {
                     $stmt2 = $mysqli->prepare('UPDATE students SET user_id = ? WHERE id = ?');
