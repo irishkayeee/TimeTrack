@@ -137,6 +137,7 @@ require_once __DIR__ . '/../includes/admin_header.php';
                     <th>Subject</th>
                     <th>Section</th>
                     <th>Status</th>
+                    <th>Created</th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -148,20 +149,24 @@ require_once __DIR__ . '/../includes/admin_header.php';
                         <td><?php echo htmlspecialchars($row['subject']); ?></td>
                         <td><?php echo htmlspecialchars($row['section_name']); ?></td>
                         <td><?php echo badgeStatus($row['status']); ?></td>
+                        <td><?php echo formatDateTime($row['created_at']); ?></td>
                         <td>
-                            <button class="btn btn-sm btn-outline-primary btn-edit-teacher" data-data='<?php echo json_encode($row); ?>'>Edit</button>
-                            <form method="post" class="d-inline-block" onsubmit="return confirm('<?php echo $row['user_id'] ? 'Reset this teacher\'s password?' : 'Create a login for this teacher?'; ?>');">
-                                <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
-                                <input type="hidden" name="action" value="<?php echo $row['user_id'] ? 'regenerate_teacher_credentials' : 'create_teacher_credentials'; ?>">
-                                <input type="hidden" name="teacher_id" value="<?php echo $row['id']; ?>">
-                                <button class="btn btn-sm btn-outline-secondary"><?php echo $row['user_id'] ? 'Reset Password' : 'Create Login'; ?></button>
-                            </form>
-                            <form method="post" class="d-inline-block" onsubmit="return confirm('Delete this teacher?');">
-                                <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
-                                <input type="hidden" name="action" value="delete_teacher">
-                                <input type="hidden" name="teacher_id" value="<?php echo $row['id']; ?>">
-                                <button class="btn btn-sm btn-outline-danger">Delete</button>
-                            </form>
+                            <div class="d-flex align-items-center gap-1">
+                                <button class="btn btn-sm btn-outline-secondary btn-icon btn-view-teacher" data-data='<?php echo json_encode($row); ?>' title="View"><i class="fa-solid fa-eye"></i></button>
+                                <button class="btn btn-sm btn-outline-primary btn-icon btn-edit-teacher" data-data='<?php echo json_encode($row); ?>' title="Edit"><i class="fa-solid fa-pen"></i></button>
+                                <form method="post" class="d-inline-block" onsubmit="return confirm('Delete this teacher?');">
+                                    <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
+                                    <input type="hidden" name="action" value="delete_teacher">
+                                    <input type="hidden" name="teacher_id" value="<?php echo $row['id']; ?>">
+                                    <button class="btn btn-sm btn-outline-danger btn-icon" title="Delete"><i class="fa-solid fa-trash"></i></button>
+                                </form>
+                                <form method="post" class="d-inline-block" onsubmit="return confirm('<?php echo $row['user_id'] ? 'Reset this teacher\'s password?' : 'Create a login for this teacher?'; ?>');">
+                                    <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
+                                    <input type="hidden" name="action" value="<?php echo $row['user_id'] ? 'regenerate_teacher_credentials' : 'create_teacher_credentials'; ?>">
+                                    <input type="hidden" name="teacher_id" value="<?php echo $row['id']; ?>">
+                                    <button class="btn btn-sm btn-outline-secondary"><?php echo $row['user_id'] ? 'Reset Password' : 'Create Login'; ?></button>
+                                </form>
+                            </div>
                         </td>
                     </tr>
                 <?php endwhile; ?>
@@ -234,7 +239,69 @@ require_once __DIR__ . '/../includes/admin_header.php';
         </div>
     </div>
 </div>
+<div class="modal fade" id="teacherViewModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-4">
+            <div class="modal-header">
+                <h5 class="modal-title">Teacher Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="text-center mb-3">
+                    <img id="viewTeacherPhoto" src="" alt="Photo" class="rounded-circle d-none" style="width:96px;height:96px;object-fit:cover;">
+                </div>
+                <dl class="row mb-0">
+                    <dt class="col-5">Teacher Code</dt><dd class="col-7" id="viewTeacherCode"></dd>
+                    <dt class="col-5">Name</dt><dd class="col-7" id="viewTeacherName"></dd>
+                    <dt class="col-5">Subject</dt><dd class="col-7" id="viewTeacherSubject"></dd>
+                    <dt class="col-5">Section</dt><dd class="col-7" id="viewTeacherSection"></dd>
+                    <dt class="col-5">Status</dt><dd class="col-7" id="viewTeacherStatus"></dd>
+                    <dt class="col-5">Email</dt><dd class="col-7" id="viewTeacherEmail"></dd>
+                    <dt class="col-5">Phone</dt><dd class="col-7" id="viewTeacherPhone"></dd>
+                    <dt class="col-5">Created</dt><dd class="col-7" id="viewTeacherCreated"></dd>
+                </dl>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
 <script>
+document.addEventListener('DOMContentLoaded', function () {
+const teacherViewModal = new bootstrap.Modal(document.getElementById('teacherViewModal'));
+const statusBadgeClass = { active: 'success', inactive: 'secondary' };
+const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function formatDateTime(sqlDateTime) {
+    if (!sqlDateTime) return '—';
+    const [datePart, timePart] = sqlDateTime.split(' ');
+    const [year, month, day] = datePart.split('-').map(Number);
+    const [hour, minute] = timePart.split(':').map(Number);
+    const period = hour >= 12 ? 'PM' : 'AM';
+    const hour12 = hour % 12 || 12;
+    return `${monthNames[month - 1]} ${day}, ${year} ${hour12}:${String(minute).padStart(2, '0')} ${period}`;
+}
+document.querySelectorAll('.btn-view-teacher').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const data = JSON.parse(btn.getAttribute('data-data'));
+        document.getElementById('viewTeacherCode').textContent = data.teacher_id || '—';
+        document.getElementById('viewTeacherName').textContent = `${data.first_name || ''} ${data.last_name || ''}`.trim() || '—';
+        document.getElementById('viewTeacherSubject').textContent = data.subject || '—';
+        document.getElementById('viewTeacherSection').textContent = data.section_name || 'Unassigned';
+        document.getElementById('viewTeacherStatus').innerHTML = `<span class="badge bg-${statusBadgeClass[data.status] || 'secondary'}">${(data.status || '').charAt(0).toUpperCase() + (data.status || '').slice(1)}</span>`;
+        document.getElementById('viewTeacherEmail').textContent = data.email || '—';
+        document.getElementById('viewTeacherPhone').textContent = data.phone || '—';
+        document.getElementById('viewTeacherCreated').textContent = formatDateTime(data.created_at);
+        const photoEl = document.getElementById('viewTeacherPhoto');
+        if (data.photo) {
+            photoEl.src = '../' + data.photo;
+            photoEl.classList.remove('d-none');
+        } else {
+            photoEl.classList.add('d-none');
+        }
+        teacherViewModal.show();
+    });
+});
 const teacherModal = new bootstrap.Modal(document.getElementById('teacherModal'));
 document.querySelectorAll('.btn-edit-teacher').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -251,8 +318,7 @@ document.querySelectorAll('.btn-edit-teacher').forEach(btn => {
         teacherModal.show();
     });
 });
-$(document).ready(function () {
-    $('#teachersTable').DataTable({ responsive: true });
+$('#teachersTable').DataTable({ responsive: true });
 });
 </script>
 <?php require_once __DIR__ . '/../includes/admin_footer.php'; ?>

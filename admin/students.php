@@ -97,6 +97,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         fclose($output);
         exit;
     }
+    if ($_POST['action'] === 'export_students_pdf') {
+        $result = $mysqli->query('SELECT s.student_id, s.first_name, s.last_name, c.code AS course_code, sec.section_name, s.year_level, s.status FROM students s LEFT JOIN courses c ON s.course_id = c.id LEFT JOIN sections sec ON s.section_id = sec.id ORDER BY s.last_name');
+        $rows = [];
+        while ($row = $result->fetch_assoc()) {
+            $rows[] = [$row['student_id'], $row['first_name'] . ' ' . $row['last_name'], $row['course_code'] ?: '-', $row['year_level'] ?: '-', $row['section_name'] ?: '-', ucfirst($row['status'])];
+        }
+        $pdf = generateSimpleTablePdf('Student List', ['ID', 'Name', 'Course', 'Year', 'Section', 'Status'], $rows, [80, 180, 90, 60, 90, 80]);
+        header('Content-Type: application/pdf');
+        header('Content-Disposition: attachment; filename="students_export_' . date('Ymd') . '.pdf"');
+        header('Content-Length: ' . strlen($pdf));
+        echo $pdf;
+        exit;
+    }
 }
 
 $courses = $mysqli->query('SELECT id, code, name FROM courses ORDER BY name');
@@ -123,63 +136,74 @@ require_once __DIR__ . '/../includes/admin_header.php';
         <table class="table table-hover" id="studentsTable">
             <thead class="table-light">
                 <tr>
-                    <th>QR</th>
                     <th>ID</th>
                     <th>Name</th>
                     <th>Course</th>
                     <th>Section</th>
                     <th>Status</th>
+                    <th>Created</th>
                     <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
                 <?php while ($row = $students->fetch_assoc()): ?>
                     <tr>
-                        <td><a href="qr-generator.php?student_id=<?php echo $row['id']; ?>" class="btn btn-sm btn-outline-secondary">QR</a></td>
                         <td><?php echo htmlspecialchars($row['student_id']); ?></td>
                         <td><?php echo htmlspecialchars($row['first_name'] . ' ' . $row['last_name']); ?></td>
                         <td><?php echo htmlspecialchars($row['course_code']); ?></td>
                         <td><?php echo htmlspecialchars($row['section_name']); ?></td>
                         <td><?php echo badgeStatus($row['status']); ?></td>
+                        <td><?php echo formatDateTime($row['created_at']); ?></td>
                         <td>
-                            <button class="btn btn-sm btn-outline-primary btn-edit" data-data='<?php echo json_encode($row); ?>'>Edit</button>
-                            <form method="post" class="d-inline-block" onsubmit="return confirm('<?php echo $row['user_id'] ? 'Reset this student\'s password?' : 'Create a login for this student?'; ?>');">
-                                <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
-                                <input type="hidden" name="action" value="<?php echo $row['user_id'] ? 'regenerate_student_credentials' : 'create_student_credentials'; ?>">
-                                <input type="hidden" name="student_id" value="<?php echo $row['id']; ?>">
-                                <button class="btn btn-sm btn-outline-secondary"><?php echo $row['user_id'] ? 'Reset Password' : 'Create Login'; ?></button>
-                            </form>
-                            <form method="post" class="d-inline-block" onsubmit="return confirm('Delete this student?');">
-                                <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
-                                <input type="hidden" name="action" value="delete_student">
-                                <input type="hidden" name="student_id" value="<?php echo $row['id']; ?>">
-                                <button class="btn btn-sm btn-outline-danger">Delete</button>
-                            </form>
+                            <div class="d-flex align-items-center gap-1">
+                                <button class="btn btn-sm btn-outline-primary btn-icon btn-edit" data-data='<?php echo json_encode($row); ?>' title="Edit"><i class="fa-solid fa-pen"></i></button>
+                                <form method="post" class="d-inline-block" onsubmit="return confirm('Delete this student?');">
+                                    <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
+                                    <input type="hidden" name="action" value="delete_student">
+                                    <input type="hidden" name="student_id" value="<?php echo $row['id']; ?>">
+                                    <button class="btn btn-sm btn-outline-danger btn-icon" title="Delete"><i class="fa-solid fa-trash"></i></button>
+                                </form>
+                                <form method="post" class="d-inline-block" onsubmit="return confirm('<?php echo $row['user_id'] ? 'Reset this student\'s password?' : 'Create a login for this student?'; ?>');">
+                                    <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
+                                    <input type="hidden" name="action" value="<?php echo $row['user_id'] ? 'regenerate_student_credentials' : 'create_student_credentials'; ?>">
+                                    <input type="hidden" name="student_id" value="<?php echo $row['id']; ?>">
+                                    <button class="btn btn-sm btn-outline-secondary"><?php echo $row['user_id'] ? 'Reset Password' : 'Create Login'; ?></button>
+                                </form>
+                            </div>
                         </td>
                     </tr>
                 <?php endwhile; ?>
             </tbody>
         </table>
     </div>
-    <div class="row mt-4">
+    <div class="row mt-4 align-items-stretch">
         <div class="col-md-6">
-            <form method="post" enctype="multipart/form-data" class="card rounded-4 p-3 shadow-sm">
+            <form method="post" enctype="multipart/form-data" class="card rounded-4 p-3 shadow-sm h-100 d-flex flex-column">
                 <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
                 <input type="hidden" name="action" value="import_students">
                 <h6>Import Students CSV</h6>
                 <div class="mb-3">
                     <input type="file" class="form-control" name="csv_file" accept=".csv" required>
                 </div>
-                <button class="btn btn-success">Upload CSV</button>
+                <button class="btn btn-success mt-auto">Upload CSV</button>
             </form>
         </div>
         <div class="col-md-6">
-            <form method="post" class="card rounded-4 p-3 shadow-sm">
-                <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
-                <input type="hidden" name="action" value="export_students">
+            <div class="card rounded-4 p-3 shadow-sm h-100 d-flex flex-column">
                 <h6>Export Students</h6>
-                <button class="btn btn-outline-primary">Download CSV</button>
-            </form>
+                <div class="mt-3 d-flex flex-column gap-2">
+                    <form method="post">
+                        <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
+                        <input type="hidden" name="action" value="export_students_pdf">
+                        <button class="btn btn-outline-primary w-100">Download PDF</button>
+                    </form>
+                    <form method="post">
+                        <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
+                        <input type="hidden" name="action" value="export_students">
+                        <button class="btn btn-outline-primary w-100">Download CSV</button>
+                    </form>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -274,6 +298,7 @@ require_once __DIR__ . '/../includes/admin_header.php';
     </div>
 </div>
 <script>
+document.addEventListener('DOMContentLoaded', function () {
 const editButtons = document.querySelectorAll('.btn-edit');
 const studentModal = new bootstrap.Modal(document.getElementById('studentModal'));
 editButtons.forEach(btn => {
@@ -296,8 +321,7 @@ editButtons.forEach(btn => {
     });
 });
 
-document.addEventListener('DOMContentLoaded', () => {
-    $('#studentsTable').DataTable({ responsive: true });
+$('#studentsTable').DataTable({ responsive: true });
 });
 </script>
 <?php require_once __DIR__ . '/../includes/admin_footer.php'; ?>

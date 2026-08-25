@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/functions.php';
 requireRole(['superadmin']);
-$pageTitle = 'User Accounts';
+$pageTitle = 'Admin Accounts';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verifyCsrf($_POST['csrf_token'] ?? '')) {
         flash('Invalid request.', 'danger');
@@ -12,22 +12,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $username = sanitize($_POST['username'] ?? '');
         $email = sanitize($_POST['email'] ?? '');
         $password = $_POST['password'] ?? '';
-        $role = sanitize($_POST['role'] ?? 'admin');
         $status = sanitize($_POST['status'] ?? 'active');
+        if (!$password) {
+            flash('Password is required.', 'danger');
+            redirect('users.php');
+        }
         if ($id) {
-            if ($password) {
-                $hash = password_hash($password, PASSWORD_DEFAULT);
-                $stmt = $mysqli->prepare('UPDATE users SET username = ?, email = ?, password_hash = ?, role = ?, status = ? WHERE id = ?');
-                $stmt->bind_param('sssssi', $username, $email, $hash, $role, $status, $id);
-            } else {
-                $stmt = $mysqli->prepare('UPDATE users SET username = ?, email = ?, role = ?, status = ? WHERE id = ?');
-                $stmt->bind_param('ssssi', $username, $email, $role, $status, $id);
+            $stmt = $mysqli->prepare('SELECT role, password_hash FROM users WHERE id = ?');
+            $stmt->bind_param('i', $id);
+            $stmt->execute();
+            $existing = $stmt->get_result()->fetch_assoc();
+            $stmt->close();
+            if (!$existing) {
+                flash('User not found.', 'danger');
+                redirect('users.php');
             }
+            $role = $existing['role'];
+            if (password_verify($password, $existing['password_hash'])) {
+                flash('New password must be different from the current password.', 'danger');
+                redirect('users.php');
+            }
+            $hash = password_hash($password, PASSWORD_DEFAULT);
+            $stmt = $mysqli->prepare('UPDATE users SET username = ?, email = ?, password_hash = ?, role = ?, status = ? WHERE id = ?');
+            $stmt->bind_param('sssssi', $username, $email, $hash, $role, $status, $id);
             $stmt->execute();
             $stmt->close();
             flash('User updated.', 'success');
         } else {
-            $hash = password_hash($password ?: 'password123', PASSWORD_DEFAULT);
+            $role = 'admin';
+            $hash = password_hash($password, PASSWORD_DEFAULT);
             $stmt = $mysqli->prepare('INSERT INTO users (username, email, password_hash, role, status, created_at) VALUES (?, ?, ?, ?, ?, NOW())');
             $stmt->bind_param('sssss', $username, $email, $hash, $role, $status);
             $stmt->execute();
@@ -46,7 +59,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('users.php');
     }
 }
-$users = $mysqli->query('SELECT id, username, email, role, status, created_at FROM users ORDER BY created_at DESC');
+$users = $mysqli->query("SELECT id, username, email, role, status, created_at FROM users WHERE role IN ('admin', 'superadmin') ORDER BY created_at DESC");
 require_once __DIR__ . '/../includes/admin_header.php';
 ?>
 <div class="card rounded-4 shadow-sm p-4">
@@ -66,15 +79,18 @@ require_once __DIR__ . '/../includes/admin_header.php';
                         <td><?php echo htmlspecialchars($row['email']); ?></td>
                         <td><?php echo htmlspecialchars(ucfirst($row['role'])); ?></td>
                         <td><?php echo badgeStatus($row['status']); ?></td>
-                        <td><?php echo htmlspecialchars($row['created_at']); ?></td>
+                        <td><?php echo formatDateTime($row['created_at']); ?></td>
                         <td>
-                            <button class="btn btn-sm btn-outline-primary btn-edit-user" data-data='<?php echo json_encode($row); ?>'>Edit</button>
-                            <form method="post" class="d-inline-block" onsubmit="return confirm('Delete this user?');">
-                                <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
-                                <input type="hidden" name="action" value="delete_user">
-                                <input type="hidden" name="user_id" value="<?php echo $row['id']; ?>">
-                                <button class="btn btn-sm btn-outline-danger">Delete</button>
-                            </form>
+                            <div class="d-flex align-items-center gap-1">
+                                <button class="btn btn-sm btn-outline-secondary btn-icon btn-view-user" data-data='<?php echo json_encode($row); ?>' title="View"><i class="fa-solid fa-eye"></i></button>
+                                <button class="btn btn-sm btn-outline-primary btn-icon btn-edit-user" data-data='<?php echo json_encode($row); ?>' title="Edit"><i class="fa-solid fa-pen"></i></button>
+                                <form method="post" class="d-inline-block" onsubmit="return confirm('Delete this user?');">
+                                    <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
+                                    <input type="hidden" name="action" value="delete_user">
+                                    <input type="hidden" name="user_id" value="<?php echo $row['id']; ?>">
+                                    <button class="btn btn-sm btn-outline-danger btn-icon" title="Delete"><i class="fa-solid fa-trash"></i></button>
+                                </form>
+                            </div>
                         </td>
                     </tr>
                 <?php endwhile; ?>
@@ -104,16 +120,15 @@ require_once __DIR__ . '/../includes/admin_header.php';
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Password</label>
-                        <input type="password" class="form-control" name="password" id="passwordField">
-                        <small class="text-muted">Leave blank to keep existing password.</small>
+                        <input type="password" class="form-control" name="password" id="passwordField" required>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Role</label>
-                        <select class="form-select" name="role" id="roleField">
-                            <option value="superadmin">Super Admin</option>
+                        <select class="form-select" id="roleField" disabled>
                             <option value="admin">Admin</option>
-                            <option value="teacher">Teacher</option>
+                            <option value="superadmin">Super Admin</option>
                         </select>
+                        <small class="text-muted">New users are always created as Admin. Role cannot be changed here.</small>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Status</label>
@@ -131,7 +146,53 @@ require_once __DIR__ . '/../includes/admin_header.php';
         </div>
     </div>
 </div>
+<div class="modal fade" id="userViewModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-4">
+            <div class="modal-header">
+                <h5 class="modal-title">User Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <dl class="row mb-0">
+                    <dt class="col-5">Username</dt><dd class="col-7" id="viewUserUsername"></dd>
+                    <dt class="col-5">Email</dt><dd class="col-7" id="viewUserEmail"></dd>
+                    <dt class="col-5">Role</dt><dd class="col-7" id="viewUserRole"></dd>
+                    <dt class="col-5">Status</dt><dd class="col-7" id="viewUserStatus"></dd>
+                    <dt class="col-5">Created</dt><dd class="col-7" id="viewUserCreated"></dd>
+                </dl>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
 <script>
+document.addEventListener('DOMContentLoaded', function () {
+const statusBadgeClass = { active: 'success', inactive: 'secondary' };
+const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function formatDateTime(sqlDateTime) {
+    if (!sqlDateTime) return '—';
+    const [datePart, timePart] = sqlDateTime.split(' ');
+    const [year, month, day] = datePart.split('-').map(Number);
+    const [hour, minute] = timePart.split(':').map(Number);
+    const period = hour >= 12 ? 'PM' : 'AM';
+    const hour12 = hour % 12 || 12;
+    return `${monthNames[month - 1]} ${day}, ${year} ${hour12}:${String(minute).padStart(2, '0')} ${period}`;
+}
+const userViewModal = new bootstrap.Modal(document.getElementById('userViewModal'));
+document.querySelectorAll('.btn-view-user').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const data = JSON.parse(btn.getAttribute('data-data'));
+        document.getElementById('viewUserUsername').textContent = data.username || '—';
+        document.getElementById('viewUserEmail').textContent = data.email || '—';
+        document.getElementById('viewUserRole').textContent = data.role ? data.role.charAt(0).toUpperCase() + data.role.slice(1) : '—';
+        document.getElementById('viewUserStatus').innerHTML = `<span class="badge bg-${statusBadgeClass[data.status] || 'secondary'}">${(data.status || '').charAt(0).toUpperCase() + (data.status || '').slice(1)}</span>`;
+        document.getElementById('viewUserCreated').textContent = formatDateTime(data.created_at);
+        userViewModal.show();
+    });
+});
 const userModal = new bootstrap.Modal(document.getElementById('userModal'));
 document.querySelectorAll('.btn-edit-user').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -144,8 +205,7 @@ document.querySelectorAll('.btn-edit-user').forEach(btn => {
         userModal.show();
     });
 });
-$(document).ready(function () {
-    $('#usersTable').DataTable({ responsive: true });
+$('#usersTable').DataTable({ responsive: true });
 });
 </script>
 <?php require_once __DIR__ . '/../includes/admin_footer.php'; ?>

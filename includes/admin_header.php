@@ -4,16 +4,11 @@ $currentPage = basename($_SERVER['PHP_SELF']);
 $adminUser = currentUser();
 $navItems = [
     ['href' => 'dashboard.php', 'icon' => 'fa-table-cells', 'label' => 'Dashboard'],
-    ['href' => 'students.php', 'icon' => 'fa-user-graduate', 'label' => 'Students'],
-    ['href' => 'teachers.php', 'icon' => 'fa-chalkboard-user', 'label' => 'Teachers'],
-    ['href' => 'courses.php', 'icon' => 'fa-graduation-cap', 'label' => 'Courses'],
-    ['href' => 'sections.php', 'icon' => 'fa-people-group', 'label' => 'Sections'],
-    ['href' => 'subjects.php', 'icon' => 'fa-book', 'label' => 'Subjects'],
+    ['href' => 'academics.php', 'icon' => 'fa-graduation-cap', 'label' => 'Academics'],
     ['href' => 'attendance.php', 'icon' => 'fa-clipboard-check', 'label' => 'Attendance'],
-    ['href' => 'reports.php', 'icon' => 'fa-chart-column', 'label' => 'Reports'],
 ];
 if (($adminUser['role'] ?? '') === 'superadmin') {
-    $navItems[] = ['href' => 'users.php', 'icon' => 'fa-user-shield', 'label' => 'User Accounts'];
+    $navItems[] = ['href' => 'users.php', 'icon' => 'fa-user-shield', 'label' => 'Admin Accounts'];
 }
 ?>
 <!DOCTYPE html>

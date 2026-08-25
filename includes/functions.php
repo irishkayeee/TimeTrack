@@ -95,6 +95,86 @@ function formatTime($time) {
     return date('h:i A', strtotime($time));
 }
 
+function formatDateTime($datetime) {
+    return $datetime ? date('M j, Y g:i A', strtotime($datetime)) : '—';
+}
+
+function pdfEscapeText($text) {
+    return str_replace(['\\', '(', ')'], ['\\\\', '\\(', '\\)'], (string) $text);
+}
+
+function generateSimpleTablePdf($title, $headers, $rows, $colWidths) {
+    $pageWidth = 792;
+    $pageHeight = 612;
+    $marginLeft = 30;
+    $marginTop = 40;
+    $lineHeight = 14;
+    $rowsPerPage = intval(($pageHeight - 90) / $lineHeight);
+
+    $chunks = $rows ? array_chunk($rows, $rowsPerPage) : [[]];
+    $numPages = count($chunks);
+    $fontObjNum = 3 + $numPages * 2;
+
+    $objects = [];
+    $kids = [];
+    for ($p = 0; $p < $numPages; $p++) {
+        $kids[] = (3 + $p * 2) . ' 0 R';
+    }
+    $objects[1] = '<< /Type /Catalog /Pages 2 0 R >>';
+    $objects[2] = '<< /Type /Pages /Kids [' . implode(' ', $kids) . "] /Count $numPages >>";
+
+    for ($p = 0; $p < $numPages; $p++) {
+        $pageObjNum = 3 + $p * 2;
+        $contentObjNum = $pageObjNum + 1;
+        $objects[$pageObjNum] = "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 $pageWidth $pageHeight] /Resources << /Font << /F1 $fontObjNum 0 R >> >> /Contents $contentObjNum 0 R >>";
+
+        $y = $pageHeight - $marginTop;
+        $stream = "BT\n";
+        if ($p === 0) {
+            $stream .= "/F1 14 Tf\n1 0 0 1 $marginLeft $y Tm\n(" . pdfEscapeText($title) . ") Tj\n";
+            $y -= 24;
+        }
+        $stream .= "/F1 9 Tf\n";
+        $x = $marginLeft;
+        $headerParts = [];
+        foreach ($headers as $i => $h) {
+            $headerParts[] = "1 0 0 1 $x $y Tm\n(" . pdfEscapeText($h) . ") Tj\n";
+            $x += $colWidths[$i];
+        }
+        $stream .= implode('', $headerParts);
+        $y -= $lineHeight;
+
+        foreach ($chunks[$p] as $row) {
+            $x = $marginLeft;
+            foreach ($row as $i => $cell) {
+                $stream .= "1 0 0 1 $x $y Tm\n(" . pdfEscapeText($cell) . ") Tj\n";
+                $x += $colWidths[$i];
+            }
+            $y -= $lineHeight;
+        }
+        $stream .= 'ET';
+        $objects[$contentObjNum] = '<< /Length ' . strlen($stream) . " >>\nstream\n$stream\nendstream";
+    }
+
+    $objects[$fontObjNum] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>';
+    ksort($objects);
+
+    $pdf = "%PDF-1.4\n";
+    $offsets = [];
+    foreach ($objects as $num => $body) {
+        $offsets[$num] = strlen($pdf);
+        $pdf .= "$num 0 obj\n$body\nendobj\n";
+    }
+    $maxObj = max(array_keys($objects));
+    $xrefStart = strlen($pdf);
+    $pdf .= "xref\n0 " . ($maxObj + 1) . "\n0000000000 65535 f \n";
+    for ($i = 1; $i <= $maxObj; $i++) {
+        $pdf .= isset($offsets[$i]) ? str_pad($offsets[$i], 10, '0', STR_PAD_LEFT) . " 00000 n \n" : "0000000000 00000 f \n";
+    }
+    $pdf .= "trailer\n<< /Size " . ($maxObj + 1) . " /Root 1 0 R >>\nstartxref\n$xrefStart\n%%EOF";
+    return $pdf;
+}
+
 function badgeStatus($status) {
     $classes = [
         'active' => 'success',
