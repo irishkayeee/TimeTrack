@@ -136,6 +136,14 @@ function unreadNotificationCount($studentId) {
     return (int) $count;
 }
 
+function markNotificationRead($notificationId, $studentId) {
+    global $mysqli;
+    $stmt = $mysqli->prepare('UPDATE notifications SET is_read = 1 WHERE id = ? AND student_id = ?');
+    $stmt->bind_param('ii', $notificationId, $studentId);
+    $stmt->execute();
+    $stmt->close();
+}
+
 function createRememberToken($userId) {
     global $mysqli;
     $token = bin2hex(random_bytes(32));
@@ -182,6 +190,7 @@ function generateSecurePassword($length = 10) {
 }
 
 function ensureSectionJoinCode($mysqli, $sectionId) {
+    $joinCode = null;
     $stmt = $mysqli->prepare('SELECT join_code FROM sections WHERE id = ? LIMIT 1');
     $stmt->bind_param('i', $sectionId);
     $stmt->execute();

@@ -15,7 +15,7 @@ if ($studentDbId !== false) {
 $navItems = [
     ['href' => 'dashboard.php', 'icon' => 'fa-table-cells', 'label' => 'Dashboard'],
     ['href' => 'subjects.php', 'icon' => 'fa-book', 'label' => 'Subjects'],
-    ['href' => 'notifications.php', 'icon' => 'fa-bell', 'label' => 'Notifications'],
+    ['href' => 'notifications.php', 'icon' => 'fa-bell', 'label' => 'Notifications', 'badge' => $unreadCount],
     ['href' => 'profile.php', 'icon' => 'fa-user', 'label' => 'My Profile'],
 ];
 ?>
@@ -46,6 +46,12 @@ $navItems = [
                 <a href="<?php echo $item['href']; ?>" class="sp-nav-link<?php echo $currentPage === $item['href'] ? ' active' : ''; ?>">
                     <span class="sp-nav-icon"><i class="fa-solid <?php echo $item['icon']; ?>"></i></span>
                     <span class="sp-nav-label"><?php echo $item['label']; ?></span>
+                    <?php if ($item['href'] === 'notifications.php'): ?>
+                        <?php $badgeCount = (int) ($item['badge'] ?? 0); ?>
+                        <span class="sp-nav-badge<?php echo $badgeCount === 0 ? ' d-none' : ''; ?>" id="spNavNotifBadge"><?php echo $badgeCount > 9 ? '9+' : $badgeCount; ?></span>
+                    <?php elseif (!empty($item['badge'])): ?>
+                        <span class="sp-nav-badge"><?php echo $item['badge'] > 9 ? '9+' : $item['badge']; ?></span>
+                    <?php endif; ?>
                     <i class="fa-solid fa-chevron-right sp-nav-chevron"></i>
                 </a>
             <?php endforeach; ?>
@@ -74,7 +80,6 @@ $navItems = [
                 </div>
             </div>
             <div class="sp-topbar-right">
-                <a href="notifications.php" class="sp-bell"><i class="fa-solid fa-bell"></i><?php if ($unreadCount > 0): ?><span class="sp-dot"></span><?php endif; ?></a>
                 <div class="sp-user">
                     <?php if ($sidebarStudent && $sidebarStudent['photo']): ?>
                         <img src="../<?php echo htmlspecialchars($sidebarStudent['photo']); ?>" alt="">

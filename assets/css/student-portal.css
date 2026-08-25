@@ -118,6 +118,17 @@ body.student-body {
     opacity: 0.45;
 }
 
+.sp-nav-badge {
+    background: #e0483e;
+    color: #fff;
+    font-size: 0.68rem;
+    font-weight: 700;
+    line-height: 1;
+    padding: 0.25rem 0.45rem;
+    border-radius: 1rem;
+    flex-shrink: 0;
+}
+
 .sp-nav-link:hover {
     background: rgba(255,255,255,0.11);
     color: #fff;
@@ -642,13 +653,18 @@ body.student-body {
 .sp-filter-select {
     width: auto;
     border-radius: 2rem;
-    background-color: var(--lp-pale-green);
+    background-color: #fff;
     color: var(--lp-dark-green);
-    border: 1px solid transparent;
-    font-size: 0.78rem;
+    border: 1px solid #e2e8e4;
+    font-size: 0.88rem;
     font-weight: 600;
-    padding: 0.35rem 1.8rem 0.35rem 0.9rem;
+    padding: 0.5rem 2rem 0.5rem 1.1rem;
     box-shadow: none;
+}
+
+.sp-filter-select option {
+    background-color: #fff;
+    color: #223027;
 }
 
 .sp-logout-icon {
@@ -687,6 +703,62 @@ body.student-body {
     border-color: var(--sp-accent-green);
     box-shadow: 0 0 0 3px rgba(47, 191, 113, 0.2);
     outline: none;
+}
+
+.sp-subject-search {
+    position: relative;
+    max-width: 380px;
+    flex: 1;
+    min-width: 240px;
+}
+
+.sp-subject-search i {
+    position: absolute;
+    left: 1.15rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #8a978f;
+    font-size: 0.95rem;
+}
+
+.sp-subject-search .form-control {
+    border-radius: 2rem;
+    padding: 0.65rem 1.1rem 0.65rem 2.9rem;
+    border: 1px solid #e2e8e4;
+    font-size: 0.92rem;
+}
+
+.sp-subject-search .form-control:focus {
+    border-color: var(--sp-accent-green);
+    box-shadow: 0 0 0 3px rgba(47, 191, 113, 0.2);
+}
+
+.sp-notif-time {
+    font-size: 0.75rem;
+    white-space: nowrap;
+}
+
+.sp-notif-filters button {
+    border: 1px solid #e2e8e4;
+    background: #fff;
+    color: #5a6b60;
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.4rem 1rem;
+}
+
+.sp-notif-filters button.active {
+    background: var(--lp-dark-green);
+    border-color: var(--lp-dark-green);
+    color: #fff;
+}
+
+.sp-notif-card {
+    cursor: pointer;
+}
+
+.sp-notif-unread {
+    background: var(--lp-pale-green);
 }
 
 .sp-history-table thead th {

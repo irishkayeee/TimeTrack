@@ -108,7 +108,7 @@ function renderSubjectCard($row, $qrToken, $studentName = '', $studentCourseYear
         $qrImageExists = file_exists($qrFilePath) && isValidPngFile($qrFilePath);
     }
     ?>
-    <div class="col-md-4">
+    <div class="col-md-4 sp-subject-col" data-search="<?php echo htmlspecialchars(strtolower($row['code'] . ' ' . $row['name'] . ' ' . $row['teacher_name'])); ?>">
         <div class="sp-subject-card">
             <div class="sp-subject-band" style="background: <?php echo $theme['color']; ?>;">
                 <i class="fa-solid <?php echo $theme['icon']; ?> sp-subject-icon"></i>
@@ -152,6 +152,7 @@ function renderSubjectCard($row, $qrToken, $studentName = '', $studentCourseYear
                     </div>
                     <?php if ($qrImageExists): ?>
                         <button type="button" class="btn btn-outline-success rounded-pill w-100 mt-3 sp-qr-save-btn" data-target="qrCard<?php echo $row['id']; ?>" data-filename="qr_<?php echo htmlspecialchars($row['code']); ?>.png"><i class="fa-solid fa-download me-1"></i> Save QR Code</button>
+                        <button type="button" class="btn btn-outline-secondary rounded-pill w-100 mt-2 sp-qr-print-btn" data-target="qrCard<?php echo $row['id']; ?>"><i class="fa-solid fa-print me-1"></i> Print QR Code</button>
                     <?php else: ?>
                         <div class="alert alert-warning mb-0">QR code unavailable. Contact an administrator.</div>
                     <?php endif; ?>
@@ -164,10 +165,27 @@ function renderSubjectCard($row, $qrToken, $studentName = '', $studentCourseYear
 
 require_once __DIR__ . '/../includes/student_header.php';
 ?>
-<div class="d-flex justify-content-end mb-3">
-    <button type="button" class="btn btn-primary rounded-pill" data-bs-toggle="modal" data-bs-target="#joinClassModal">
-        <i class="fa-solid fa-plus me-1"></i> Join Class
-    </button>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div class="sp-subject-search">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <input type="text" class="form-control" id="spSubjectSearch" placeholder="Search subjects...">
+    </div>
+    <div class="d-flex gap-2">
+        <?php $allSubjects = array_merge($activeSubjects, $inactiveSubjects); ?>
+        <div class="dropdown">
+            <button type="button" class="btn btn-outline-success rounded-pill dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" <?php echo empty($allSubjects) ? 'disabled' : ''; ?>>
+                <i class="fa-solid fa-qrcode me-1"></i> QR Code
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+                <?php foreach ($allSubjects as $s): ?>
+                    <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#qrModal<?php echo $s['id']; ?>"><?php echo htmlspecialchars($s['code'] . ' - ' . $s['name']); ?></a></li>
+                <?php endforeach; ?>
+            </ul>
+        </div>
+        <button type="button" class="btn btn-primary rounded-pill" data-bs-toggle="modal" data-bs-target="#joinClassModal">
+            <i class="fa-solid fa-plus me-1"></i> Join Class
+        </button>
+    </div>
 </div>
 <?php if (!$sectionId): ?>
     <div class="alert alert-info">You are not assigned to a section yet. Contact an administrator.</div>
@@ -233,6 +251,17 @@ require_once __DIR__ . '/../includes/student_header.php';
     </div>
 </div>
 <script>
+    var subjectSearchField = document.getElementById('spSubjectSearch');
+    if (subjectSearchField) {
+        subjectSearchField.addEventListener('input', function () {
+            var query = this.value.trim().toLowerCase();
+            document.querySelectorAll('.sp-subject-col').forEach(function (col) {
+                var matches = col.getAttribute('data-search').indexOf(query) !== -1;
+                col.classList.toggle('d-none', !matches);
+            });
+        });
+    }
+
     var classCodeField = document.getElementById('classCodeField');
     var joinClassSubmit = document.getElementById('joinClassSubmit');
     if (classCodeField && joinClassSubmit) {
@@ -256,6 +285,29 @@ require_once __DIR__ . '/../includes/student_header.php';
                 link.download = filename;
                 link.href = canvas.toDataURL('image/png');
                 link.click();
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }).catch(function () {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            });
+        });
+    });
+
+    document.querySelectorAll('.sp-qr-print-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var target = document.getElementById(btn.getAttribute('data-target'));
+            if (!target || typeof html2canvas === 'undefined') {
+                return;
+            }
+            var originalText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = 'Preparing...';
+            html2canvas(target, { backgroundColor: '#ffffff', scale: 2 }).then(function (canvas) {
+                var dataUrl = canvas.toDataURL('image/png');
+                var printWindow = window.open('', '_blank');
+                printWindow.document.write('<html><head><title>Print QR Code</title><style>body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;}img{max-width:100%;}</style></head><body><img src="' + dataUrl + '" onload="window.print();"></body></html>');
+                printWindow.document.close();
                 btn.disabled = false;
                 btn.innerHTML = originalText;
             }).catch(function () {
