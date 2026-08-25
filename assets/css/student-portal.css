@@ -27,6 +27,13 @@ body.student-body {
     left: 0;
     z-index: 1030;
     transition: transform 0.2s ease;
+    overflow-y: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.sp-sidebar::-webkit-scrollbar {
+    display: none;
 }
 
 .sp-brand {
@@ -67,13 +74,12 @@ body.student-body {
 }
 
 .sp-nav {
-    flex: 1;
+    flex: 1 0 auto;
     padding: 1.75rem 1rem 1rem;
     display: flex;
     flex-direction: column;
     justify-content: flex-start;
     gap: 0.9rem;
-    overflow-y: auto;
     overflow-x: visible;
 }
 
@@ -225,6 +231,24 @@ body.student-body {
     display: flex;
     align-items: center;
     gap: 0.6rem;
+}
+
+.sp-user-toggle {
+    cursor: pointer;
+    padding: 0.4rem 0.6rem;
+    border-radius: 0.9rem;
+    transition: background 0.15s ease;
+}
+
+.sp-user-toggle:hover,
+.sp-user-toggle[aria-expanded="true"] {
+    background: var(--lp-pale-green);
+}
+
+.sp-user-caret {
+    font-size: 0.7rem;
+    color: #8a978f;
+    margin-left: 0.2rem;
 }
 
 .sp-user i.fa-circle-user {

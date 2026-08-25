@@ -47,6 +47,11 @@ $openLogin = isset($_GET['login']);
                     <i class="fa-solid fa-table-cells"></i>
                     <span>Features</span>
                 </a>
+                <span class="lp-nav-divider"></span>
+                <a href="#how-it-works" class="lp-nav-link">
+                    <i class="fa-solid fa-diagram-project"></i>
+                    <span>How TimeTrack Works</span>
+                </a>
             </div>
         </div>
         <button type="button" class="lp-btn-login order-lg-3 ms-lg-3" data-bs-toggle="modal" data-bs-target="#loginModal">
@@ -145,8 +150,100 @@ $openLogin = isset($_GET['login']);
     </div>
 </section>
 
+<section class="lp-steps" id="how-it-works">
+    <div class="lp-section-divider"></div>
+    <div class="container">
+        <div class="text-center lp-steps-header">
+            <span class="lp-why-badge"><i class="fa-solid fa-bolt"></i> Fast &amp; Simple Process</span>
+            <h2 class="lp-steps-title">How TimeTrack Works</h2>
+            <div class="lp-why-divider">
+                <span></span>
+                <i class="fa-solid fa-circle"></i>
+                <span></span>
+            </div>
+        </div>
+        <div class="lp-steps-row">
+            <div class="lp-step-card">
+                <div class="lp-step-icon"><i class="fa-solid fa-calendar-check"></i></div>
+                <div class="lp-step-title"><span class="lp-step-num">1</span><h6>Teacher Opens Class</h6></div>
+                <p>Teacher selects the scheduled class.</p>
+            </div>
+            <i class="fa-solid fa-chevron-right lp-step-arrow" aria-hidden="true"></i>
+            <div class="lp-step-card">
+                <div class="lp-step-icon"><i class="fa-solid fa-qrcode"></i></div>
+                <div class="lp-step-title"><span class="lp-step-num">2</span><h6>Scan Student QR</h6></div>
+                <p>Teacher opens the camera and scans the student's QR code.</p>
+            </div>
+            <i class="fa-solid fa-chevron-right lp-step-arrow" aria-hidden="true"></i>
+            <div class="lp-step-card">
+                <div class="lp-step-icon"><i class="fa-solid fa-circle-check"></i></div>
+                <div class="lp-step-title"><span class="lp-step-num">3</span><h6>Attendance Recorded</h6></div>
+                <p>System automatically identifies the student and records Present/Late/Absent.</p>
+            </div>
+            <i class="fa-solid fa-chevron-right lp-step-arrow" aria-hidden="true"></i>
+            <div class="lp-step-card">
+                <div class="lp-step-icon"><i class="fa-solid fa-desktop"></i></div>
+                <div class="lp-step-title"><span class="lp-step-num">4</span><h6>Monitor Attendance</h6></div>
+                <p>Teacher and students can view attendance history and statistics.</p>
+            </div>
+        </div>
+
+        <div class="lp-cta">
+            <h2 class="lp-cta-title">
+                <i class="fa-solid fa-quote-left lp-cta-quote"></i>
+                Don't just fly,<br>
+                <span class="lp-cta-highlight">soar high!
+                    <svg class="lp-cta-underline" viewBox="0 0 220 20" preserveAspectRatio="none" aria-hidden="true">
+                        <path d="M4,14 C60,4 160,4 216,14"></path>
+                    </svg>
+                </span>
+            </h2>
+        </div>
+    </div>
+</section>
+
 <footer class="lp-footer">
-    <p>&copy; <?php echo date('Y'); ?> TimeTrack. All rights reserved.</p>
+    <div class="lp-footer-wave" aria-hidden="true">
+        <svg viewBox="0 0 1440 60" preserveAspectRatio="none"><path d="M0,30 C360,60 1080,0 1440,30 L1440,60 L0,60 Z"></path></svg>
+    </div>
+    <div class="container-fluid px-4 px-lg-5">
+        <div class="row g-4">
+            <div class="col-lg-3 col-md-6">
+                <div class="lp-footer-brand">
+                    <img src="assets/images/iblogo.png" alt="TimeTrack logo">
+                    <div>
+                        <div class="lp-footer-brand-name">TimeTrack</div>
+                        <small>Smart Attendance. Stronger Community.</small>
+                    </div>
+                </div>
+                <p class="lp-footer-desc">A smart attendance tracking system for a more organized and accountable school environment.</p>
+            </div>
+            <div class="col-lg-2 col-md-6 col-6">
+                <h6 class="lp-footer-heading">Quick Links</h6>
+                <ul class="lp-footer-links">
+                    <li><a href="#home"><i class="fa-solid fa-house"></i> Home</a></li>
+                    <li><a href="#features"><i class="fa-solid fa-table-cells"></i> Features</a></li>
+                    <li><a href="#how-it-works"><i class="fa-solid fa-diagram-project"></i> How TimeTrack Works</a></li>
+                </ul>
+            </div>
+            <div class="col-lg-3 col-md-6 col-6">
+                <h6 class="lp-footer-heading">Contact Info</h6>
+                <ul class="lp-footer-contact">
+                    <li><i class="fa-solid fa-location-dot"></i> <a href="https://maps.app.goo.gl/KKxuNdDUiKBTYUmN7" target="_blank" rel="noopener">Nasugbu, Batangas</a></li>
+                    <li><i class="fa-solid fa-envelope"></i> <a href="https://mail.google.com/mail/?view=cm&amp;fs=1&amp;to=timetrack04@gmail.com" target="_blank" rel="noopener">timetrack04@gmail.com</a></li>
+                </ul>
+            </div>
+            <div class="col-lg-3 col-md-6">
+                <h6 class="lp-footer-heading">Find Us</h6>
+                <div class="lp-footer-map">
+                    <iframe src="https://www.google.com/maps/embed?pb=!4v1787670057151!6m8!1m7!1s3U2VRCdV2GoifJG8SYyAdg!2m2!1d14.05862475375671!2d120.6378957289337!3f204.41949267694974!4f-3.6764714318943987!5f0.7820865974627469" loading="lazy" allowfullscreen referrerpolicy="strict-origin-when-cross-origin" title="TimeTrack location map"></iframe>
+                </div>
+            </div>
+        </div>
+        <div class="lp-footer-bottom">
+            <p>&copy; <?php echo date('Y'); ?> TimeTrack. All rights reserved.</p>
+        </div>
+    </div>
 </footer>
 </div>
 

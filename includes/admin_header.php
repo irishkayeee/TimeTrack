@@ -10,10 +10,7 @@ $navItems = [
     ['href' => 'sections.php', 'icon' => 'fa-people-group', 'label' => 'Sections'],
     ['href' => 'subjects.php', 'icon' => 'fa-book', 'label' => 'Subjects'],
     ['href' => 'attendance.php', 'icon' => 'fa-clipboard-check', 'label' => 'Attendance'],
-    ['href' => 'qr-generator.php', 'icon' => 'fa-qrcode', 'label' => 'QR Generator'],
-    ['href' => 'scanner.php', 'icon' => 'fa-camera', 'label' => 'Scanner'],
     ['href' => 'reports.php', 'icon' => 'fa-chart-column', 'label' => 'Reports'],
-    ['href' => 'settings.php', 'icon' => 'fa-gear', 'label' => 'Settings'],
 ];
 if (($adminUser['role'] ?? '') === 'superadmin') {
     $navItems[] = ['href' => 'users.php', 'icon' => 'fa-user-shield', 'label' => 'User Accounts'];
@@ -74,12 +71,19 @@ if (($adminUser['role'] ?? '') === 'superadmin') {
                 </div>
             </div>
             <div class="sp-topbar-right">
-                <div class="sp-user">
-                    <i class="fa-solid fa-circle-user fa-2x text-secondary"></i>
-                    <div>
-                        <div class="sp-user-name"><?php echo htmlspecialchars($adminUser['username'] ?? 'Admin'); ?></div>
-                        <div class="sp-user-role"><?php echo htmlspecialchars(ucfirst($adminUser['role'] ?? 'admin')); ?></div>
+                <div class="dropdown">
+                    <div class="sp-user sp-user-toggle" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="fa-solid fa-circle-user fa-2x text-secondary"></i>
+                        <div>
+                            <div class="sp-user-name"><?php echo htmlspecialchars($adminUser['username'] ?? 'Admin'); ?></div>
+                            <div class="sp-user-role"><?php echo htmlspecialchars(ucfirst($adminUser['role'] ?? 'admin')); ?></div>
+                        </div>
+                        <i class="fa-solid fa-chevron-down sp-user-caret"></i>
                     </div>
+                    <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                        <li><a class="dropdown-item" href="profile.php"><i class="fa-solid fa-user me-2 text-muted"></i>Profile</a></li>
+                        <li><a class="dropdown-item" href="settings.php"><i class="fa-solid fa-gear me-2 text-muted"></i>Settings</a></li>
+                    </ul>
                 </div>
             </div>
         </header>
