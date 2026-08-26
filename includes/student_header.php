@@ -27,7 +27,7 @@ $navItems = [
     <title><?php echo htmlspecialchars($pageTitle ?? 'Student Portal'); ?> | <?php echo htmlspecialchars($schoolName); ?></title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/datatables/1.13.6/css/dataTables.bootstrap5.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/datatables.net-bs5/2.3.8/dataTables.bootstrap5.min.css" />
     <link rel="stylesheet" href="../assets/css/theme-tokens.css">
     <link rel="stylesheet" href="../assets/css/dashboard-theme.css">
     <link rel="stylesheet" href="../assets/css/student-portal.css">
@@ -93,6 +93,24 @@ $navItems = [
                 </div>
             </div>
         </header>
+        <?php $welcome = welcomeBannerMessage(); if ($welcome): ?>
+        <div class="sp-welcome-overlay" id="spWelcomeOverlay">
+            <div class="sp-welcome-card">
+                <div class="sp-welcome-icon"><i class="fa-solid fa-circle-check"></i></div>
+                <h5 class="sp-welcome-title">Welcome back, <?php echo htmlspecialchars($welcome['name']); ?>!</h5>
+                <p class="sp-welcome-message"><?php echo htmlspecialchars($welcome['message']); ?></p>
+                <button type="button" class="sp-welcome-btn" onclick="spDismissWelcome()">Let's Go <i class="fa-solid fa-arrow-right"></i></button>
+            </div>
+        </div>
+        <script>
+            function spDismissWelcome() {
+                var el = document.getElementById('spWelcomeOverlay');
+                if (!el) return;
+                el.classList.add('sp-flash-hide');
+                setTimeout(function () { el.remove(); }, 350);
+            }
+        </script>
+        <?php endif; ?>
         <?php $flash = flashMessage(); if ($flash): ?>
         <div class="sp-flash-overlay" id="spFlashOverlay">
             <div class="sp-flash-card sp-flash-<?php echo htmlspecialchars($flash['type']); ?>">

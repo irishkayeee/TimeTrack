@@ -326,6 +326,14 @@ require_once __DIR__ . '/../includes/teacher_header.php';
                         <input type="email" class="form-control" name="email" id="emailField" readonly>
                     </div>
                     <div class="col-md-6">
+                        <label class="form-label">Guardian / Contact Person</label>
+                        <input type="text" class="form-control" name="guardian" id="guardianField">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Guardian Email</label>
+                        <input type="email" class="form-control" name="guardian_email" id="guardianEmailField" placeholder="Attendance alerts will be sent here">
+                    </div>
+                    <div class="col-md-6">
                         <label class="form-label">Course</label>
                         <select class="form-select" name="course_id" id="courseField">
                             <option value="0">Unassigned</option>
@@ -376,6 +384,8 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('genderField').value = data.gender;
             document.getElementById('phoneField').value = data.phone;
             document.getElementById('emailField').value = data.email;
+            document.getElementById('guardianField').value = data.guardian_name;
+            document.getElementById('guardianEmailField').value = data.guardian_email;
             document.getElementById('courseField').value = data.course_id;
             document.getElementById('yearField').value = data.year_level;
             document.getElementById('sectionField').value = data.section_id;

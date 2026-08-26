@@ -39,7 +39,7 @@ if (!$subject) {
     exit;
 }
 
-$stmt = $mysqli->prepare('SELECT s.id, s.first_name, s.last_name, s.student_id, s.course_id, s.section_id, s.photo, c.code AS course_code, sec.section_name FROM students s LEFT JOIN courses c ON s.course_id = c.id LEFT JOIN sections sec ON s.section_id = sec.id WHERE s.qr_code = ? OR s.student_id = ? LIMIT 1');
+$stmt = $mysqli->prepare('SELECT s.id, s.first_name, s.last_name, s.student_id, s.course_id, s.section_id, s.photo, s.guardian_name, s.guardian_email, c.code AS course_code, sec.section_name FROM students s LEFT JOIN courses c ON s.course_id = c.id LEFT JOIN sections sec ON s.section_id = sec.id WHERE s.qr_code = ? OR s.student_id = ? LIMIT 1');
 $stmt->bind_param('ss', $qrValue, $qrValue);
 $stmt->execute();
 $result = $stmt->get_result();
@@ -77,6 +77,8 @@ $stmt->close();
 $notifTitles = ['present' => 'Attendance Recorded', 'late' => 'Marked Late', 'absent' => 'Marked Absent'];
 $notifMessage = 'You were marked ' . $status . ' in ' . $subject['name'] . ' today.';
 notifyStudent($student['id'], $status, $notifTitles[$status] ?? 'Attendance Recorded', $notifMessage, $subjectId);
+
+notifyGuardianOfAttendance($student, $subject['name'], $status, $scanTime);
 
 logActivity($_SESSION['user']['id'] ?? 0, 'Scanned QR for student ' . $student['student_id']);
 echo json_encode(['status' => 'success', 'message' => 'Attendance saved.', 'student' => $student, 'statusLabel' => $status]);

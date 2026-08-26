@@ -270,7 +270,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $name = sanitize($_POST['name'] ?? '');
         $teacherId = intval($_POST['teacher_id'] ?? 0);
         $sectionId = intval($_POST['section_id'] ?? 0);
-        $dayOfWeek = sanitize($_POST['day_of_week'] ?? 'Mon');
+        $allowedDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+        $postedDays = is_array($_POST['day_of_week'] ?? null) ? $_POST['day_of_week'] : [$_POST['day_of_week'] ?? 'Mon'];
+        $days = array_values(array_intersect($allowedDays, array_map('sanitize', $postedDays)));
+        if (!$days) {
+            $days = ['Mon'];
+        }
         $startTime = sanitize($_POST['start_time'] ?? '07:30');
         $endTime = sanitize($_POST['end_time'] ?? '');
         $endTimeParam = $endTime ?: null;
@@ -280,19 +285,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $importantNoteParam = $importantNote ?: null;
         $status = sanitize($_POST['status'] ?? 'active');
         $teacherIdParam = $teacherId ?: null;
+
+        $previousTeacherId = null;
         if ($id) {
-            $stmt = $mysqli->prepare('UPDATE subjects SET code = ?, name = ?, teacher_id = ?, section_id = ?, day_of_week = ?, start_time = ?, end_time = ?, room = ?, credit_units = ?, important_note = ?, status = ? WHERE id = ?');
-            $stmt->bind_param('ssiissssissi', $code, $name, $teacherIdParam, $sectionId, $dayOfWeek, $startTime, $endTimeParam, $room, $creditUnits, $importantNoteParam, $status, $id);
-            $stmt->execute();
-            $stmt->close();
-            flash('Subject updated.', 'success');
-        } else {
-            $stmt = $mysqli->prepare('INSERT INTO subjects (code, name, teacher_id, section_id, day_of_week, start_time, end_time, room, credit_units, important_note, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())');
-            $stmt->bind_param('ssiissssiss', $code, $name, $teacherIdParam, $sectionId, $dayOfWeek, $startTime, $endTimeParam, $room, $creditUnits, $importantNoteParam, $status);
-            $stmt->execute();
-            $stmt->close();
-            flash('Subject created.', 'success');
+            $prevStmt = $mysqli->prepare('SELECT teacher_id FROM subjects WHERE id = ?');
+            $prevStmt->bind_param('i', $id);
+            $prevStmt->execute();
+            $prevStmt->bind_result($previousTeacherId);
+            $prevStmt->fetch();
+            $prevStmt->close();
         }
+        $isNewTeacherAssignment = $teacherIdParam && (int) $previousTeacherId !== (int) $teacherIdParam;
+
+        if ($id) {
+            $firstDay = $days[0];
+            $stmt = $mysqli->prepare('UPDATE subjects SET code = ?, name = ?, teacher_id = ?, section_id = ?, day_of_week = ?, start_time = ?, end_time = ?, room = ?, credit_units = ?, important_note = ?, status = ? WHERE id = ?');
+            $stmt->bind_param('ssiissssissi', $code, $name, $teacherIdParam, $sectionId, $firstDay, $startTime, $endTimeParam, $room, $creditUnits, $importantNoteParam, $status, $id);
+            $stmt->execute();
+            $stmt->close();
+            $extraDays = array_slice($days, 1);
+        } else {
+            $extraDays = $days;
+        }
+
+        foreach ($extraDays as $day) {
+            $stmt = $mysqli->prepare('INSERT INTO subjects (code, name, teacher_id, section_id, day_of_week, start_time, end_time, room, credit_units, important_note, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())');
+            $stmt->bind_param('ssiissssiss', $code, $name, $teacherIdParam, $sectionId, $day, $startTime, $endTimeParam, $room, $creditUnits, $importantNoteParam, $status);
+            $stmt->execute();
+            $stmt->close();
+        }
+
+        if ($isNewTeacherAssignment) {
+            notifyTeacherOfSubjectAssignment($mysqli, $teacherIdParam, $code, $name, $days, $startTime);
+        }
+
+        flash($id ? 'Subject updated.' : (count($days) > 1 ? 'Subject created for ' . count($days) . ' days.' : 'Subject created.'), 'success');
         redirect('academics.php');
     }
     if ($_POST['action'] === 'delete_subject' && !empty($_POST['subject_id'])) {
@@ -412,7 +439,7 @@ require_once __DIR__ . '/../includes/admin_header.php';
                                 <td><?php echo htmlspecialchars($row['course_code']); ?></td>
                                 <td><?php echo htmlspecialchars($row['section_name']); ?></td>
                                 <td><?php echo badgeStatus($row['status']); ?></td>
-                                <td><?php echo formatDateTime($row['created_at']); ?></td>
+                                <td><?php echo date('M j, Y', strtotime($row['created_at'])); ?></td>
                                 <td>
                                     <div class="d-flex align-items-center gap-1">
                                         <button class="btn btn-sm btn-outline-primary btn-icon btn-edit" data-data='<?php echo json_encode($row); ?>' title="Edit"><i class="fa-solid fa-pen"></i></button>
@@ -427,7 +454,7 @@ require_once __DIR__ . '/../includes/admin_header.php';
                                                 <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
                                                 <input type="hidden" name="action" value="create_student_credentials">
                                                 <input type="hidden" name="student_id" value="<?php echo $row['id']; ?>">
-                                                <button type="button" class="btn btn-sm btn-outline-secondary btn-action js-confirm-submit" data-message="Create a login for this student?">Create Login</button>
+                                                <button type="button" class="btn btn-sm btn-outline-secondary btn-icon js-confirm-submit" data-message="Create a login for this student?" title="Create Login"><i class="fa-solid fa-user-plus"></i></button>
                                             </form>
                                         <?php endif; ?>
                                     </div>
@@ -503,9 +530,9 @@ require_once __DIR__ . '/../includes/admin_header.php';
                                 <td><?php echo htmlspecialchars($row['teacher_id']); ?></td>
                                 <td><?php echo htmlspecialchars($row['first_name'] . ' ' . $row['last_name']); ?></td>
                                 <td><?php echo htmlspecialchars($row['subject']); ?></td>
-                                <td><?php echo htmlspecialchars($row['section_name']); ?></td>
+                                <td><?php echo htmlspecialchars($row['section_name'] ?? ''); ?></td>
                                 <td><?php echo badgeStatus($row['status']); ?></td>
-                                <td><?php echo formatDateTime($row['created_at']); ?></td>
+                                <td><?php echo date('M j, Y', strtotime($row['created_at'])); ?></td>
                                 <td>
                                     <div class="d-flex align-items-center gap-1">
                                         <button class="btn btn-sm btn-outline-secondary btn-icon btn-view-teacher" data-data='<?php echo json_encode($row); ?>' title="View"><i class="fa-solid fa-eye"></i></button>
@@ -521,7 +548,7 @@ require_once __DIR__ . '/../includes/admin_header.php';
                                                 <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
                                                 <input type="hidden" name="action" value="create_teacher_credentials">
                                                 <input type="hidden" name="teacher_id" value="<?php echo $row['id']; ?>">
-                                                <button type="button" class="btn btn-sm btn-outline-secondary btn-action js-confirm-submit" data-message="Create a login for this teacher?">Create Login</button>
+                                                <button type="button" class="btn btn-sm btn-outline-secondary btn-icon js-confirm-submit" data-message="Create a login for this teacher?" title="Create Login"><i class="fa-solid fa-user-plus"></i></button>
                                             </form>
                                         <?php endif; ?>
                                     </div>
@@ -609,12 +636,15 @@ require_once __DIR__ . '/../includes/admin_header.php';
 
     <div class="tab-pane fade" id="tab-subjects" role="tabpanel">
         <div class="card rounded-4 shadow-sm p-4">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <div>
-                    <h6>Subject Management</h6>
-                    <p class="text-muted mb-0">A subject is a class session: one weekly day/time slot, taught by a teacher to a section. A class held on multiple days needs one row per day.</p>
+            <div class="mb-3">
+                <h6>Subject Management</h6>
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div class="sp-subject-search">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <input type="text" class="form-control" id="subjectSearchInput" placeholder="Search subjects...">
+                    </div>
+                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#subjectModal">Add Subject</button>
                 </div>
-                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#subjectModal">Add Subject</button>
             </div>
             <div class="table-responsive">
                 <table class="table table-hover" id="subjectsTable">
@@ -684,12 +714,12 @@ require_once __DIR__ . '/../includes/admin_header.php';
                         </select>
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label">Birthday</label>
-                        <input type="date" class="form-control" name="birthday" id="birthdayField" required>
-                    </div>
-                    <div class="col-md-6">
                         <label class="form-label">Guardian</label>
                         <input type="text" class="form-control" name="guardian" id="guardianField">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Guardian Email</label>
+                        <input type="email" class="form-control" name="guardian_email" id="guardianEmailField" placeholder="For attendance alerts">
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Phone</label>
@@ -952,13 +982,17 @@ require_once __DIR__ . '/../includes/admin_header.php';
                             <?php endforeach; ?>
                         </select>
                     </div>
-                    <div class="col-md-6">
-                        <label class="form-label">Day of Week</label>
-                        <select class="form-select" name="day_of_week" id="subjectDayField">
+                    <div class="col-md-12">
+                        <label class="form-label">Day(s) of Week</label>
+                        <div class="d-flex flex-wrap gap-3" id="subjectDayField">
                             <?php foreach (['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as $day): ?>
-                                <option value="<?php echo $day; ?>"><?php echo $day; ?></option>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="day_of_week[]" value="<?php echo $day; ?>" id="subjectDay<?php echo $day; ?>">
+                                    <label class="form-check-label" for="subjectDay<?php echo $day; ?>"><?php echo $day; ?></label>
+                                </div>
                             <?php endforeach; ?>
-                        </select>
+                        </div>
+                        <small class="text-muted">Selecting multiple days creates one class session per day, all sharing this same time and details.</small>
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Start Time</label>
@@ -1008,8 +1042,8 @@ document.querySelectorAll('.btn-edit').forEach(btn => {
         document.getElementById('firstNameField').value = data.first_name;
         document.getElementById('lastNameField').value = data.last_name;
         document.getElementById('genderField').value = data.gender;
-        document.getElementById('birthdayField').value = data.birthday;
         document.getElementById('guardianField').value = data.guardian_name;
+        document.getElementById('guardianEmailField').value = data.guardian_email;
         document.getElementById('phoneField').value = data.phone;
         document.getElementById('emailField').value = data.email;
         document.getElementById('courseField').value = data.course_id;
@@ -1105,7 +1139,9 @@ document.querySelectorAll('.btn-edit-subject').forEach(btn => {
         document.getElementById('subjectNameField').value = data.name;
         document.getElementById('subjectTeacherField').value = data.teacher_id || '0';
         document.getElementById('subjectSectionField').value = data.section_id;
-        document.getElementById('subjectDayField').value = data.day_of_week;
+        document.querySelectorAll('#subjectDayField input[type="checkbox"]').forEach(function (cb) {
+            cb.checked = cb.value === data.day_of_week;
+        });
         document.getElementById('subjectStartTimeField').value = data.start_time;
         document.getElementById('subjectEndTimeField').value = data.end_time || '';
         document.getElementById('subjectRoomField').value = data.room || '';
@@ -1116,7 +1152,7 @@ document.querySelectorAll('.btn-edit-subject').forEach(btn => {
     });
 });
 
-var studentsTable = $('#studentsTable').DataTable({ responsive: true });
+var studentsTable = $('#studentsTable').DataTable({ responsive: true, paging: false, ordering: false, dom: 'frt' });
 
 function applyStudentFilters() {
     var course = $('#studentCourseFilter').val();
@@ -1127,10 +1163,13 @@ function applyStudentFilters() {
 }
 $('#studentCourseFilter, #studentSectionFilter').on('change', applyStudentFilters);
 
-$('#teachersTable').DataTable({ responsive: true });
-$('#coursesTable').DataTable({ responsive: true });
-$('#sectionsTable').DataTable({ responsive: true });
-$('#subjectsTable').DataTable({ responsive: true });
+$('#teachersTable').DataTable({ responsive: true, paging: false, ordering: false, dom: 'frt' });
+$('#coursesTable').DataTable({ responsive: true, paging: false, ordering: false, dom: 'frt' });
+$('#sectionsTable').DataTable({ responsive: true, paging: false, ordering: false, dom: 'frt' });
+var subjectsTable = $('#subjectsTable').DataTable({ responsive: true, paging: false, ordering: false, dom: 'frt' });
+$('#subjectSearchInput').on('input', function () {
+    subjectsTable.search(this.value).draw();
+});
 
 document.querySelectorAll('#academicsTabs button[data-bs-toggle="tab"]').forEach(function (tabBtn) {
     tabBtn.addEventListener('shown.bs.tab', function () {

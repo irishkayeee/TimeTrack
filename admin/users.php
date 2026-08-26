@@ -205,7 +205,7 @@ document.querySelectorAll('.btn-edit-user').forEach(btn => {
         userModal.show();
     });
 });
-$('#usersTable').DataTable({ responsive: true });
+$('#usersTable').DataTable({ responsive: true, paging: false, ordering: false, dom: 'frt' });
 });
 </script>
 <?php require_once __DIR__ . '/../includes/admin_footer.php'; ?>

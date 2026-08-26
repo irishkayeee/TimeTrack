@@ -3,17 +3,20 @@ $schoolName = getSetting('school_name', 'Attendance Management System');
 $currentPage = basename($_SERVER['PHP_SELF']);
 $teacherDbId = currentTeacherId();
 $sidebarTeacher = null;
+$teacherUnreadCount = 0;
 if ($teacherDbId !== false) {
     $sidebarStmt = $mysqli->prepare('SELECT first_name, last_name, photo FROM teachers WHERE id = ? LIMIT 1');
     $sidebarStmt->bind_param('i', $teacherDbId);
     $sidebarStmt->execute();
     $sidebarTeacher = $sidebarStmt->get_result()->fetch_assoc();
     $sidebarStmt->close();
+    generateTeacherClassNotifications($mysqli, $teacherDbId);
+    $teacherUnreadCount = unreadTeacherNotificationCount($teacherDbId);
 }
 $navItems = [
     ['href' => 'dashboard.php', 'icon' => 'fa-table-cells', 'label' => 'Dashboard'],
     ['href' => 'subjects.php', 'icon' => 'fa-book', 'label' => 'My Classes'],
-    ['href' => 'announcements.php', 'icon' => 'fa-bell', 'label' => 'Notifications'],
+    ['href' => 'announcements.php', 'icon' => 'fa-bell', 'label' => 'Notifications', 'badge' => $teacherUnreadCount],
     ['href' => 'profile.php', 'icon' => 'fa-user', 'label' => 'My Profile'],
 ];
 ?>
@@ -25,7 +28,7 @@ $navItems = [
     <title><?php echo htmlspecialchars($pageTitle ?? 'Teacher Portal'); ?> | <?php echo htmlspecialchars($schoolName); ?></title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/datatables/1.13.6/css/dataTables.bootstrap5.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/datatables.net-bs5/2.3.8/dataTables.bootstrap5.min.css" />
     <link rel="stylesheet" href="../assets/css/theme-tokens.css">
     <link rel="stylesheet" href="../assets/css/dashboard-theme.css">
     <link rel="stylesheet" href="../assets/css/student-portal.css">
@@ -44,6 +47,12 @@ $navItems = [
                 <a href="<?php echo $item['href']; ?>" class="sp-nav-link<?php echo $currentPage === $item['href'] ? ' active' : ''; ?>">
                     <span class="sp-nav-icon"><i class="fa-solid <?php echo $item['icon']; ?>"></i></span>
                     <span class="sp-nav-label"><?php echo $item['label']; ?></span>
+                    <?php if ($item['href'] === 'announcements.php'): ?>
+                        <?php $badgeCount = (int) ($item['badge'] ?? 0); ?>
+                        <span class="sp-nav-badge<?php echo $badgeCount === 0 ? ' d-none' : ''; ?>" id="spNavNotifBadge"><?php echo $badgeCount > 9 ? '9+' : $badgeCount; ?></span>
+                    <?php elseif (!empty($item['badge'])): ?>
+                        <span class="sp-nav-badge"><?php echo $item['badge'] > 9 ? '9+' : $item['badge']; ?></span>
+                    <?php endif; ?>
                     <i class="fa-solid fa-chevron-right sp-nav-chevron"></i>
                 </a>
             <?php endforeach; ?>
@@ -85,6 +94,24 @@ $navItems = [
                 </div>
             </div>
         </header>
+        <?php $welcome = welcomeBannerMessage(); if ($welcome): ?>
+        <div class="sp-welcome-overlay" id="spWelcomeOverlay">
+            <div class="sp-welcome-card">
+                <div class="sp-welcome-icon"><i class="fa-solid fa-circle-check"></i></div>
+                <h5 class="sp-welcome-title">Welcome back, <?php echo htmlspecialchars($welcome['name']); ?>!</h5>
+                <p class="sp-welcome-message"><?php echo htmlspecialchars($welcome['message']); ?></p>
+                <button type="button" class="sp-welcome-btn" onclick="spDismissWelcome()">Let's Go <i class="fa-solid fa-arrow-right"></i></button>
+            </div>
+        </div>
+        <script>
+            function spDismissWelcome() {
+                var el = document.getElementById('spWelcomeOverlay');
+                if (!el) return;
+                el.classList.add('sp-flash-hide');
+                setTimeout(function () { el.remove(); }, 350);
+            }
+        </script>
+        <?php endif; ?>
         <?php $flash = flashMessage(); if ($flash): ?>
         <div class="sp-flash-overlay" id="spFlashOverlay">
             <div class="sp-flash-card sp-flash-<?php echo htmlspecialchars($flash['type']); ?>">

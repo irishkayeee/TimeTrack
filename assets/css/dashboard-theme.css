@@ -97,6 +97,14 @@
     min-width: 0;
 }
 
+#studentsTable td, #studentsTable th,
+#teachersTable td, #teachersTable th,
+#coursesTable td, #coursesTable th,
+#sectionsTable td, #sectionsTable th,
+#subjectsTable td, #subjectsTable th {
+    padding: 0.55rem 0.6rem;
+}
+
 .table-avatar {
     width: 36px;
     height: 36px;

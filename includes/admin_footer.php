@@ -1,5 +1,4 @@
         </main>
-        <footer class="sp-copyright">&copy; <?php echo date('Y'); ?> TimeTrack. All rights reserved.</footer>
     </div>
 </div>
 
@@ -52,10 +51,28 @@
     </div>
 </div>
 
+<?php if ($welcome): ?>
+<div class="sp-welcome-overlay" id="spWelcomeOverlay">
+    <div class="sp-welcome-card">
+        <div class="sp-welcome-icon"><i class="fa-solid fa-circle-check"></i></div>
+        <h5 class="sp-welcome-title">Welcome back, <?php echo htmlspecialchars($welcome['name']); ?>!</h5>
+        <p class="sp-welcome-message"><?php echo htmlspecialchars($welcome['message']); ?></p>
+        <button type="button" class="sp-welcome-btn" onclick="spDismissWelcome()">Let's Go <i class="fa-solid fa-arrow-right"></i></button>
+    </div>
+</div>
+<script>
+    function spDismissWelcome() {
+        var el = document.getElementById('spWelcomeOverlay');
+        if (!el) return;
+        el.classList.add('sp-flash-hide');
+        setTimeout(function () { el.remove(); }, 350);
+    }
+</script>
+<?php endif; ?>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/datatables/1.13.6/js/jquery.dataTables.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/datatables/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/datatables.net/2.3.8/dataTables.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/datatables.net-bs5/2.3.8/dataTables.bootstrap5.min.js"></script>
 <script>
     var spToggle = document.getElementById('spSidebarToggle');
     var spShell = document.getElementById('spShell');

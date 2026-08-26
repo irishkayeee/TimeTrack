@@ -250,7 +250,7 @@ document.addEventListener('DOMContentLoaded', function () {
     periodField.addEventListener('change', updatePeriodFields);
     updatePeriodFields();
 
-    $('#attendanceTable').DataTable({ responsive: true });
+    $('#attendanceTable').DataTable({ responsive: true, paging: false, ordering: false, dom: 'frt' });
 });
 </script>
 <?php require_once __DIR__ . '/../includes/admin_footer.php'; ?>

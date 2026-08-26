@@ -124,6 +124,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash('Room updated.', 'success');
         redirect('subjects.php');
     }
+    if ($_POST['action'] === 'create_class') {
+        $code = trim(sanitize($_POST['code'] ?? ''));
+        $name = trim(sanitize($_POST['name'] ?? ''));
+        $sectionId = intval($_POST['section_id'] ?? 0);
+        $allowedDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+        $selectedDays = array_values(array_intersect($allowedDays, $_POST['day_of_week'] ?? []));
+        $startTime = sanitize($_POST['start_time'] ?? '07:30');
+        $endTime = sanitize($_POST['end_time'] ?? '');
+        $endTimeParam = $endTime ?: null;
+        $room = trim(sanitize($_POST['room'] ?? ''));
+        $roomParam = $room !== '' ? $room : null;
+        $creditUnits = intval($_POST['credit_units'] ?? 0) ?: null;
+        $importantNote = trim(sanitize($_POST['important_note'] ?? ''));
+        $importantNoteParam = $importantNote !== '' ? $importantNote : null;
+
+        if ($code === '' || $name === '' || !$sectionId || empty($selectedDays)) {
+            flash('Please fill in the class code, name, section, and select at least one day.', 'danger');
+            redirect('subjects.php');
+        }
+
+        $sectionCheck = $mysqli->prepare('SELECT id FROM sections WHERE id = ? LIMIT 1');
+        $sectionCheck->bind_param('i', $sectionId);
+        $sectionCheck->execute();
+        $sectionCheck->store_result();
+        $validSection = $sectionCheck->num_rows > 0;
+        $sectionCheck->close();
+
+        if (!$validSection) {
+            flash('Please select a valid section.', 'danger');
+            redirect('subjects.php');
+        }
+
+        $newSubjectId = null;
+        foreach ($selectedDays as $day) {
+            $ins = $mysqli->prepare('INSERT INTO subjects (code, name, teacher_id, section_id, day_of_week, start_time, end_time, room, credit_units, important_note, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "active", NOW())');
+            $ins->bind_param('ssiissssis', $code, $name, $teacherId, $sectionId, $day, $startTime, $endTimeParam, $roomParam, $creditUnits, $importantNoteParam);
+            $ins->execute();
+            $newSubjectId = $mysqli->insert_id;
+            $ins->close();
+        }
+
+        $joinCode = ensureClassJoinCode($mysqli, $newSubjectId);
+        flash('Class created! Share this join code with your students: ' . $joinCode, 'success');
+        redirect('subjects.php');
+    }
 }
 
 $statusFilter = sanitize($_GET['status'] ?? 'active');
@@ -257,9 +302,12 @@ foreach ($cardGroups as &$group) {
         return $dayOrder[$a] <=> $dayOrder[$b];
     });
     $group['action_id'] = $group['day_ids'][$todayCode] ?? $group['day_ids'][$group['days'][0]];
-    $group['join_code'] = ensureSectionJoinCode($mysqli, $group['section_id']);
+    $group['join_code'] = ensureClassJoinCode($mysqli, $group['id']);
 }
 unset($group);
+
+$allSectionsStmt = $mysqli->query('SELECT sec.id, sec.section_name, sec.year_level, c.code AS course_code FROM sections sec LEFT JOIN courses c ON sec.course_id = c.id ORDER BY sec.year_level, sec.section_name');
+$allSections = $allSectionsStmt->fetch_all(MYSQLI_ASSOC);
 
 require_once __DIR__ . '/../includes/teacher_header.php';
 ?>
@@ -300,6 +348,9 @@ require_once __DIR__ . '/../includes/teacher_header.php';
             </div>
         </div>
     </div>
+</div>
+<div class="d-flex justify-content-end mb-3">
+    <button type="button" class="btn btn-primary rounded-pill" data-bs-toggle="modal" data-bs-target="#createClassModal"><i class="fa-solid fa-plus me-1"></i> Create Class</button>
 </div>
 <div class="card p-3 mb-3">
     <div class="sp-mc-toolbar">
@@ -462,6 +513,76 @@ require_once __DIR__ . '/../includes/teacher_header.php';
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" class="btn btn-primary">Save Room</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="createClassModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-4">
+            <div class="modal-header">
+                <h5 class="modal-title">Create Class</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="post">
+                <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
+                <input type="hidden" name="action" value="create_class">
+                <div class="modal-body row g-3">
+                    <p class="text-muted small mb-0">Create a class for a section you're teaching. A join code will be generated so you can share it with your students.</p>
+                    <div class="col-md-6">
+                        <label class="form-label">Class Code</label>
+                        <input type="text" class="form-control" name="code" placeholder="e.g. IT 205" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Class Name</label>
+                        <input type="text" class="form-control" name="name" placeholder="e.g. Web Development" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Section</label>
+                        <select class="form-select" name="section_id" required>
+                            <option value="">Select a section</option>
+                            <?php foreach ($allSections as $section): ?>
+                                <option value="<?php echo $section['id']; ?>"><?php echo htmlspecialchars(($section['course_code'] ? $section['course_code'] . ' - ' : '') . $section['year_level'] . ' - ' . $section['section_name']); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Room</label>
+                        <input type="text" class="form-control" name="room" placeholder="e.g. IT Lab 5">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Days of Week</label>
+                        <div class="d-flex flex-wrap gap-3">
+                            <?php foreach (['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as $day): ?>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="day_of_week[]" value="<?php echo $day; ?>" id="createClassDay<?php echo $day; ?>">
+                                    <label class="form-check-label" for="createClassDay<?php echo $day; ?>"><?php echo $day; ?></label>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Start Time</label>
+                        <input type="time" class="form-control" name="start_time" value="07:30" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">End Time</label>
+                        <input type="time" class="form-control" name="end_time">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Credit Units</label>
+                        <input type="number" min="0" class="form-control" name="credit_units">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Important Note</label>
+                        <textarea class="form-control" name="important_note" rows="2" placeholder="Shown to students on the class page"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create Class</button>
                 </div>
             </form>
         </div>

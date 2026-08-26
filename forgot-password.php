@@ -5,12 +5,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash('Invalid request.', 'danger');
         redirect('forgot-password.php');
     }
-    $username = sanitize($_POST['username'] ?? '');
-    $token = requestPasswordReset($username);
-    if ($token) {
-        flash('Password reset link generated. Use the token in the link shown below.', 'success');
-        $_SESSION['reset_link'] = 'reset-password.php?token=' . $token;
-        redirect('forgot-password.php');
+    $email = sanitize($_POST['email'] ?? '');
+    $result = requestPasswordReset($email);
+    if ($result) {
+        $_SESSION['reset_user_id'] = $result['id'];
+        unset($_SESSION['reset_otp_verified'], $_SESSION['reset_otp']);
+        if (isMailConfigured() && !empty($result['email'])) {
+            $subject = 'Your TimeTrack password reset code';
+            $body = '<p>Hi ' . htmlspecialchars($result['username']) . ',</p>'
+                . '<p>Your one-time password (OTP) to reset your TimeTrack password is:</p>'
+                . '<p style="font-size:28px;font-weight:bold;letter-spacing:4px;">' . htmlspecialchars($result['otp']) . '</p>'
+                . '<p>This code expires in 5 minutes. If you didn\'t request this, you can safely ignore this email.</p>';
+            if (sendMail($result['email'], $result['username'], $subject, $body)) {
+                flash('An OTP has been sent to your email. It expires in 5 minutes.', 'success');
+            } else {
+                flash('Could not send the email right now. Use the code below instead.', 'warning');
+                $_SESSION['reset_otp_debug'] = $result['otp'];
+            }
+        } else {
+            flash('Email sending is not configured yet. Use the code below instead.', 'warning');
+            $_SESSION['reset_otp_debug'] = $result['otp'];
+        }
+        redirect('reset-password.php');
     }
     flash('Unable to find that account.', 'danger');
     redirect('forgot-password.php');
@@ -152,21 +168,15 @@ $schoolName = getSetting('school_name', 'Dr. Francisco L. Calingasan Memorial Co
             <div class="modal-body text-center">
                 <img src="assets/images/iblogo.png" alt="TimeTrack logo" class="lp-login-logo">
                 <h4 class="lp-login-title" id="forgotModalLabel">Forgot Password</h4>
-                <p class="lp-login-subtitle">Enter your email or student ID to reset your password</p>
+                <p class="lp-login-subtitle">Enter your email to reset your password</p>
                 <?php if ($flash): ?>
                     <div class="alert alert-<?php echo htmlspecialchars($flash['type']); ?>"><?php echo htmlspecialchars($flash['message']); ?></div>
-                <?php endif; ?>
-                <?php if (!empty($_SESSION['reset_link'])): ?>
-                    <div class="alert alert-warning">
-                        Reset URL: <a href="<?php echo htmlspecialchars($_SESSION['reset_link']); ?>"><?php echo htmlspecialchars($_SESSION['reset_link']); ?></a>
-                        <?php unset($_SESSION['reset_link']); ?>
-                    </div>
                 <?php endif; ?>
                 <form method="post" class="text-start">
                     <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
                     <div class="lp-login-field mb-3">
                         <i class="fa-solid fa-envelope"></i>
-                        <input type="text" name="username" class="form-control" placeholder="Email or Student ID" required>
+                        <input type="email" name="email" class="form-control" placeholder="Email" required>
                     </div>
                     <button type="submit" class="lp-login-submit w-100">Request Reset <i class="fa-solid fa-arrow-right"></i></button>
                 </form>

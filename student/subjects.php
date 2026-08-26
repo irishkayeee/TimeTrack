@@ -22,35 +22,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'join_
         redirect('subjects.php');
     }
 
-    $sectionStmt = $mysqli->prepare('SELECT id, section_name, year_level FROM sections WHERE join_code = ? LIMIT 1');
-    $sectionStmt->bind_param('s', $classCode);
-    $sectionStmt->execute();
-    $targetSection = $sectionStmt->get_result()->fetch_assoc();
-    $sectionStmt->close();
+    $classStmt = $mysqli->prepare('SELECT teacher_id, section_id, code, name FROM subjects WHERE join_code = ? LIMIT 1');
+    $classStmt->bind_param('s', $classCode);
+    $classStmt->execute();
+    $targetClass = $classStmt->get_result()->fetch_assoc();
+    $classStmt->close();
 
-    if (!$targetSection) {
+    if (!$targetClass) {
         flash('That class code doesn\'t match any class. Double-check it with your teacher.', 'danger');
         redirect('subjects.php');
     }
 
-    $currentSectionStmt = $mysqli->prepare('SELECT section_id FROM students WHERE id = ?');
-    $currentSectionStmt->bind_param('i', $studentDbId);
-    $currentSectionStmt->execute();
-    $currentSectionStmt->bind_result($currentSectionId);
-    $currentSectionStmt->fetch();
-    $currentSectionStmt->close();
+    // A class is every subjects row (one per meeting day) sharing the same
+    // teacher + section + code, so enroll the student in all of them at once.
+    $rowsStmt = $mysqli->prepare('SELECT id FROM subjects WHERE teacher_id <=> ? AND section_id = ? AND code = ?');
+    $rowsStmt->bind_param('iis', $targetClass['teacher_id'], $targetClass['section_id'], $targetClass['code']);
+    $rowsStmt->execute();
+    $rowsResult = $rowsStmt->get_result();
+    $classSubjectIds = [];
+    while ($r = $rowsResult->fetch_assoc()) {
+        $classSubjectIds[] = (int) $r['id'];
+    }
+    $rowsStmt->close();
 
-    if ((int) $currentSectionId === (int) $targetSection['id']) {
-        flash('You\'re already in ' . $targetSection['year_level'] . ' - ' . $targetSection['section_name'] . '.', 'info');
-        redirect('subjects.php');
+    $joinedCount = 0;
+    foreach ($classSubjectIds as $subjId) {
+        $insStmt = $mysqli->prepare('INSERT IGNORE INTO enrollments (student_id, subject_id) VALUES (?, ?)');
+        $insStmt->bind_param('ii', $studentDbId, $subjId);
+        $insStmt->execute();
+        $joinedCount += $mysqli->affected_rows > 0 ? 1 : 0;
+        $insStmt->close();
     }
 
-    $updateStmt = $mysqli->prepare('UPDATE students SET section_id = ? WHERE id = ?');
-    $updateStmt->bind_param('ii', $targetSection['id'], $studentDbId);
-    $updateStmt->execute();
-    $updateStmt->close();
-
-    flash('Joined ' . $targetSection['year_level'] . ' - ' . $targetSection['section_name'] . '. Your class list now reflects this section.', 'success');
+    if ($joinedCount === 0) {
+        flash('You\'re already in ' . $targetClass['name'] . '.', 'info');
+    } else {
+        flash('Joined ' . $targetClass['name'] . '. It now appears in your class list.', 'success');
+    }
     redirect('subjects.php');
 }
 
@@ -78,20 +86,24 @@ if ($sectionId) {
 
 $activeSubjects = [];
 $inactiveSubjects = [];
-if ($sectionId) {
-    $stmt = $mysqli->prepare("SELECT sub.*, CONCAT(t.first_name, ' ', t.last_name) AS teacher_name FROM subjects sub LEFT JOIN teachers t ON sub.teacher_id = t.id WHERE sub.section_id = ? ORDER BY sub.name");
-    $stmt->bind_param('i', $sectionId);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    while ($row = $result->fetch_assoc()) {
-        if ($row['status'] === 'active') {
-            $activeSubjects[] = $row;
-        } else {
-            $inactiveSubjects[] = $row;
-        }
+$sectionIdParam = $sectionId ?: 0;
+$stmt = $mysqli->prepare("SELECT DISTINCT sub.*, CONCAT(t.first_name, ' ', t.last_name) AS teacher_name
+    FROM subjects sub
+    LEFT JOIN teachers t ON sub.teacher_id = t.id
+    LEFT JOIN enrollments e ON e.subject_id = sub.id AND e.student_id = ?
+    WHERE sub.section_id = ? OR e.id IS NOT NULL
+    ORDER BY sub.name");
+$stmt->bind_param('ii', $studentDbId, $sectionIdParam);
+$stmt->execute();
+$result = $stmt->get_result();
+while ($row = $result->fetch_assoc()) {
+    if ($row['status'] === 'active') {
+        $activeSubjects[] = $row;
+    } else {
+        $inactiveSubjects[] = $row;
     }
-    $stmt->close();
 }
+$stmt->close();
 
 function renderSubjectCard($row, $qrToken, $studentName = '', $studentCourseYear = '') {
     $theme = subjectTheme($row['id']);
@@ -187,7 +199,7 @@ require_once __DIR__ . '/../includes/student_header.php';
         </button>
     </div>
 </div>
-<?php if (!$sectionId): ?>
+<?php if (!$sectionId && empty($activeSubjects) && empty($inactiveSubjects)): ?>
     <div class="alert alert-info">You are not assigned to a section yet. Contact an administrator.</div>
 <?php elseif (empty($activeSubjects) && empty($inactiveSubjects)): ?>
     <div class="alert alert-info">No subjects scheduled for your section yet.</div>
@@ -235,7 +247,7 @@ require_once __DIR__ . '/../includes/student_header.php';
                         <p class="text-muted small mb-2">Ask your teacher for the class code, then enter it here.</p>
                         <input type="text" class="form-control" name="class_code" id="classCodeField" placeholder="Class code">
                     </div>
-                    <div class="alert alert-warning small mb-3"><i class="fa-solid fa-triangle-exclamation me-1"></i> Joining a code replaces your current section and class list &mdash; it doesn't just add one class.</div>
+                    <div class="alert alert-info small mb-3"><i class="fa-solid fa-circle-info me-1"></i> Joining a code adds that one class to your list &mdash; it won't remove or replace your other classes.</div>
                     <p class="fw-semibold small mb-1">To sign in with a class code</p>
                     <ul class="text-muted small mb-0 ps-3">
                         <li>Use a class code with 5&ndash;8 letters or numbers, no spaces or symbols</li>

@@ -19,7 +19,7 @@ if (($adminUser['role'] ?? '') === 'superadmin') {
     <title><?php echo htmlspecialchars($pageTitle ?? 'Admin Portal'); ?> | <?php echo htmlspecialchars($schoolName); ?></title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/datatables/1.13.6/css/dataTables.bootstrap5.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/datatables.net-bs5/2.3.8/dataTables.bootstrap5.min.css" />
     <link rel="stylesheet" href="../assets/css/theme-tokens.css">
     <link rel="stylesheet" href="../assets/css/dashboard-theme.css">
     <link rel="stylesheet" href="../assets/css/student-portal.css">
@@ -82,5 +82,5 @@ if (($adminUser['role'] ?? '') === 'superadmin') {
                 </div>
             </div>
         </header>
-        <?php $flash = flashMessage(); ?>
+        <?php $flash = flashMessage(); $welcome = welcomeBannerMessage(); ?>
         <main class="sp-content">

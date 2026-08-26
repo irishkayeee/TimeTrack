@@ -1089,6 +1089,94 @@ td.sp-status-excused {
     color: #e08b1d;
 }
 
+.sp-welcome-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(20, 40, 30, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2100;
+    animation: spWelcomeFadeIn 0.25s ease;
+    transition: opacity 0.35s ease;
+}
+
+.sp-welcome-overlay.sp-flash-hide {
+    opacity: 0;
+}
+
+@keyframes spWelcomeFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.sp-welcome-card {
+    background: #fff;
+    border-radius: 1.5rem;
+    padding: 2.75rem 2.5rem 2.25rem;
+    box-shadow: 0 30px 70px rgba(0, 0, 0, 0.25);
+    text-align: center;
+    max-width: 380px;
+    width: 90%;
+    animation: spWelcomePop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes spWelcomePop {
+    from { opacity: 0; transform: scale(0.85) translateY(10px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.sp-welcome-icon {
+    width: 72px;
+    height: 72px;
+    margin: 0 auto 1.25rem;
+    border-radius: 50%;
+    background: var(--lp-pale-green);
+    color: var(--lp-dark-green);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+}
+
+.sp-welcome-title {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--lp-dark-green);
+    margin-bottom: 0.5rem;
+}
+
+.sp-welcome-message {
+    color: #5a6b60;
+    font-size: 0.98rem;
+    margin-bottom: 1.75rem;
+}
+
+.sp-welcome-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    width: 100%;
+    background: var(--lp-dark-green);
+    color: #fff;
+    border: none;
+    border-radius: 2rem;
+    padding: 0.8rem 1.5rem;
+    font-weight: 600;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.sp-welcome-btn:hover {
+    background: var(--lp-mid-green);
+    transform: translateY(-2px);
+}
+
 .sp-today-row {
     display: flex;
     align-items: center;
@@ -1327,12 +1415,19 @@ td.sp-status-excused {
 .sp-mc-toolbar {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 0.6rem;
+    row-gap: 0.75rem;
+}
+
+.sp-mc-toolbar form {
+    flex-wrap: nowrap !important;
 }
 
 .sp-mc-search {
     position: relative;
     flex-grow: 1;
+    min-width: 220px;
 }
 
 .sp-mc-search i {

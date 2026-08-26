@@ -73,6 +73,15 @@ function flashMessage() {
     return null;
 }
 
+function welcomeBannerMessage() {
+    if (!empty($_SESSION['welcome_banner'])) {
+        $banner = $_SESSION['welcome_banner'];
+        unset($_SESSION['welcome_banner']);
+        return $banner;
+    }
+    return null;
+}
+
 function getSetting($key, $default = '') {
     global $mysqli;
     $stmt = $mysqli->prepare('SELECT value FROM settings WHERE name = ? LIMIT 1');
@@ -175,6 +184,73 @@ function generateSimpleTablePdf($title, $headers, $rows, $colWidths) {
     return $pdf;
 }
 
+function isMailConfigured() {
+    return SMTP_USERNAME !== '' && SMTP_PASSWORD !== '';
+}
+
+function smtpReadResponse($socket) {
+    $data = '';
+    while ($line = fgets($socket, 515)) {
+        $data .= $line;
+        if (isset($line[3]) && $line[3] === ' ') {
+            break;
+        }
+    }
+    return $data;
+}
+
+function smtpCommand($socket, $command, $expectedCode) {
+    fwrite($socket, $command . "\r\n");
+    $response = smtpReadResponse($socket);
+    $code = substr($response, 0, 3);
+    if ($code !== (string) $expectedCode) {
+        throw new Exception("SMTP error for command [$command]: $response");
+    }
+    return $response;
+}
+
+function sendMail($toEmail, $toName, $subject, $htmlBody) {
+    if (!isMailConfigured()) {
+        return false;
+    }
+    try {
+        $socket = stream_socket_client('tcp://' . SMTP_HOST . ':' . SMTP_PORT, $errno, $errstr, 15);
+        if (!$socket) {
+            throw new Exception("Could not connect to SMTP host: $errstr");
+        }
+        smtpReadResponse($socket);
+        smtpCommand($socket, 'EHLO localhost', 250);
+        smtpCommand($socket, 'STARTTLS', 220);
+        if (!stream_socket_enable_crypto($socket, true, STREAM_CRYPTO_METHOD_TLS_CLIENT)) {
+            throw new Exception('Unable to start TLS encryption.');
+        }
+        smtpCommand($socket, 'EHLO localhost', 250);
+        smtpCommand($socket, 'AUTH LOGIN', 334);
+        smtpCommand($socket, base64_encode(SMTP_USERNAME), 334);
+        smtpCommand($socket, base64_encode(SMTP_PASSWORD), 235);
+        smtpCommand($socket, 'MAIL FROM:<' . SMTP_FROM_EMAIL . '>', 250);
+        smtpCommand($socket, 'RCPT TO:<' . $toEmail . '>', 250);
+        smtpCommand($socket, 'DATA', 354);
+
+        $headers = [
+            'From: ' . SMTP_FROM_NAME . ' <' . SMTP_FROM_EMAIL . '>',
+            'To: ' . $toName . ' <' . $toEmail . '>',
+            'Subject: ' . $subject,
+            'MIME-Version: 1.0',
+            'Content-Type: text/html; charset=UTF-8',
+        ];
+        $body = str_replace("\r\n.", "\r\n..", $htmlBody);
+        $message = implode("\r\n", $headers) . "\r\n\r\n" . $body . "\r\n.";
+        smtpCommand($socket, $message, 250);
+        smtpCommand($socket, 'QUIT', 221);
+        fclose($socket);
+        return true;
+    } catch (Exception $e) {
+        error_log('sendMail failed: ' . $e->getMessage());
+        return false;
+    }
+}
+
 function badgeStatus($status) {
     $classes = [
         'active' => 'success',
@@ -182,7 +258,10 @@ function badgeStatus($status) {
         'present' => 'success',
         'absent' => 'danger',
         'late' => 'warning',
-        'excused' => 'info'
+        'excused' => 'info',
+        'reminder' => 'info',
+        'summary' => 'primary',
+        'assignment' => 'success'
     ];
     $class = isset($classes[$status]) ? $classes[$status] : 'secondary';
     return '<span class="badge status-badge bg-' . $class . '">' . ucfirst($status) . '</span>';
@@ -190,9 +269,10 @@ function badgeStatus($status) {
 
 function logActivity($userId, $action) {
     global $mysqli;
-    $ip = $_SERVER['REMOTE_ADDR'];
+    $ip = $_SERVER['REMOTE_ADDR'] ?? '';
+    $userIdParam = $userId ?: null;
     $stmt = $mysqli->prepare('INSERT INTO logs (user_id, action, ip, created_at) VALUES (?, ?, ?, NOW())');
-    $stmt->bind_param('iss', $userId, $action, $ip);
+    $stmt->bind_param('iss', $userIdParam, $action, $ip);
     $stmt->execute();
     $stmt->close();
 }
@@ -203,6 +283,23 @@ function notifyStudent($studentId, $type, $title, $message, $subjectId = null) {
     $stmt->bind_param('iisss', $studentId, $subjectId, $type, $title, $message);
     $stmt->execute();
     $stmt->close();
+}
+
+function notifyGuardianOfAttendance($student, $subjectName, $status, $scanTime) {
+    if (empty($student['guardian_email']) || !isMailConfigured()) {
+        return false;
+    }
+    $statusLabels = ['present' => 'present', 'late' => 'late', 'absent' => 'absent'];
+    $statusLabel = $statusLabels[$status] ?? $status;
+    $studentName = trim($student['first_name'] . ' ' . $student['last_name']);
+    $guardianName = $student['guardian_name'] ?: 'Guardian';
+    $subject = $studentName . ' was marked ' . ucfirst($statusLabel) . ' in ' . $subjectName;
+    $body = '<p>Hi ' . htmlspecialchars($guardianName) . ',</p>'
+        . '<p>This is to inform you that <strong>' . htmlspecialchars($studentName) . '</strong> was marked '
+        . '<strong>' . htmlspecialchars(ucfirst($statusLabel)) . '</strong> in <strong>' . htmlspecialchars($subjectName) . '</strong> '
+        . 'today at ' . date('g:i A', strtotime($scanTime)) . '.</p>'
+        . '<p>— TimeTrack Attendance System</p>';
+    return sendMail($student['guardian_email'], $guardianName, $subject, $body);
 }
 
 function unreadNotificationCount($studentId) {
@@ -222,6 +319,112 @@ function markNotificationRead($notificationId, $studentId) {
     $stmt->bind_param('ii', $notificationId, $studentId);
     $stmt->execute();
     $stmt->close();
+}
+
+function notifyTeacher($teacherId, $type, $title, $message, $subjectId = null) {
+    global $mysqli;
+    $stmt = $mysqli->prepare('INSERT INTO notifications (teacher_id, subject_id, type, title, message, created_at) VALUES (?, ?, ?, ?, ?, NOW())');
+    $stmt->bind_param('iisss', $teacherId, $subjectId, $type, $title, $message);
+    $stmt->execute();
+    $stmt->close();
+}
+
+function notifyTeacherOfSubjectAssignment($mysqli, $teacherId, $code, $name, $days, $startTime) {
+    $stmt = $mysqli->prepare('SELECT first_name, last_name, email FROM teachers WHERE id = ? LIMIT 1');
+    $stmt->bind_param('i', $teacherId);
+    $stmt->execute();
+    $teacher = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    if (!$teacher) {
+        return;
+    }
+
+    $teacherName = trim($teacher['first_name'] . ' ' . $teacher['last_name']);
+    $dayList = implode(', ', $days);
+    $timeLabel = formatTime($startTime);
+    $subjectLabel = $name . ' (' . $code . ')';
+
+    $message = 'You have been assigned to teach ' . $subjectLabel . ' on ' . $dayList . ' at ' . $timeLabel . '. Please set up your class.';
+    notifyTeacher($teacherId, 'assignment', 'New Class Assignment', $message, null);
+
+    if (!empty($teacher['email']) && isMailConfigured()) {
+        $subject = 'New Class Assignment: ' . $subjectLabel;
+        $body = '<p>Hi ' . htmlspecialchars($teacherName) . ',</p>'
+            . '<p>You have been assigned to teach <strong>' . htmlspecialchars($subjectLabel) . '</strong>, scheduled on '
+            . '<strong>' . htmlspecialchars($dayList) . '</strong> at <strong>' . htmlspecialchars($timeLabel) . '</strong>.</p>'
+            . '<p>Please log in to the Teacher Portal to set up and prepare your class.</p>'
+            . '<p>— TimeTrack Attendance System</p>';
+        sendMail($teacher['email'], $teacherName, $subject, $body);
+    }
+}
+
+function unreadTeacherNotificationCount($teacherId) {
+    global $mysqli;
+    $stmt = $mysqli->prepare('SELECT COUNT(*) FROM notifications WHERE teacher_id = ? AND is_read = 0');
+    $stmt->bind_param('i', $teacherId);
+    $stmt->execute();
+    $stmt->bind_result($count);
+    $stmt->fetch();
+    $stmt->close();
+    return (int) $count;
+}
+
+function markTeacherNotificationRead($notificationId, $teacherId) {
+    global $mysqli;
+    $stmt = $mysqli->prepare('UPDATE notifications SET is_read = 1 WHERE id = ? AND teacher_id = ?');
+    $stmt->bind_param('ii', $notificationId, $teacherId);
+    $stmt->execute();
+    $stmt->close();
+}
+
+function teacherNotificationExistsToday($mysqli, $teacherId, $subjectId, $type) {
+    $stmt = $mysqli->prepare('SELECT id FROM notifications WHERE teacher_id = ? AND subject_id = ? AND type = ? AND DATE(created_at) = CURDATE() LIMIT 1');
+    $stmt->bind_param('iis', $teacherId, $subjectId, $type);
+    $stmt->execute();
+    $stmt->store_result();
+    $exists = $stmt->num_rows > 0;
+    $stmt->close();
+    return $exists;
+}
+
+function generateTeacherClassNotifications($mysqli, $teacherId) {
+    $today = date('D');
+    $now = time();
+    $todayDate = date('Y-m-d');
+
+    $stmt = $mysqli->prepare("SELECT id, code, name, start_time, end_time, room FROM subjects WHERE teacher_id = ? AND day_of_week = ? AND status = 'active'");
+    $stmt->bind_param('is', $teacherId, $today);
+    $stmt->execute();
+    $subjects = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    $stmt->close();
+
+    foreach ($subjects as $subject) {
+        $startTs = strtotime($todayDate . ' ' . $subject['start_time']);
+        $endTs = $subject['end_time'] ? strtotime($todayDate . ' ' . $subject['end_time']) : $startTs + 3600;
+
+        if ($now >= $startTs - 900 && $now < $startTs && !teacherNotificationExistsToday($mysqli, $teacherId, $subject['id'], 'reminder')) {
+            $message = $subject['name'] . ' (' . $subject['code'] . ') starts at ' . date('g:i A', $startTs) . ($subject['room'] ? ' in ' . $subject['room'] : '') . '.';
+            notifyTeacher($teacherId, 'reminder', 'Upcoming Class', $message, $subject['id']);
+        }
+
+        if ($now >= $endTs && !teacherNotificationExistsToday($mysqli, $teacherId, $subject['id'], 'summary')) {
+            $counts = ['present' => 0, 'late' => 0, 'absent' => 0, 'excused' => 0];
+            $total = 0;
+            $cStmt = $mysqli->prepare('SELECT status, COUNT(*) AS c FROM attendance WHERE subject_id = ? AND date = CURDATE() GROUP BY status');
+            $cStmt->bind_param('i', $subject['id']);
+            $cStmt->execute();
+            $result = $cStmt->get_result();
+            while ($row = $result->fetch_assoc()) {
+                $counts[$row['status']] = (int) $row['c'];
+                $total += (int) $row['c'];
+            }
+            $cStmt->close();
+            if ($total > 0) {
+                $message = $subject['name'] . ': ' . $counts['present'] . ' present, ' . $counts['late'] . ' late, ' . $counts['absent'] . ' absent.';
+                notifyTeacher($teacherId, 'summary', 'Attendance Summary', $message, $subject['id']);
+            }
+        }
+    }
 }
 
 function createRememberToken($userId) {
@@ -304,6 +507,66 @@ function ensureSectionJoinCode($mysqli, $sectionId) {
         }
     }
     return null;
+}
+
+// A "class" is one or more subjects rows sharing the same teacher_id + section_id
+// + code (one row per meeting day). The join code is per-class, not per-section,
+// so joining it only adds that one class to a student's list via `enrollments`
+// instead of swapping their whole section (and every subject in it).
+function ensureClassJoinCode($mysqli, $subjectId) {
+    $refStmt = $mysqli->prepare('SELECT teacher_id, section_id, code, join_code FROM subjects WHERE id = ? LIMIT 1');
+    $refStmt->bind_param('i', $subjectId);
+    $refStmt->execute();
+    $ref = $refStmt->get_result()->fetch_assoc();
+    $refStmt->close();
+
+    if (!$ref) {
+        return null;
+    }
+    if ($ref['join_code']) {
+        return $ref['join_code'];
+    }
+
+    // A sibling day-row for the same class may already have a code.
+    $siblingStmt = $mysqli->prepare('SELECT join_code FROM subjects WHERE teacher_id <=> ? AND section_id = ? AND code = ? AND join_code IS NOT NULL LIMIT 1');
+    $siblingStmt->bind_param('iis', $ref['teacher_id'], $ref['section_id'], $ref['code']);
+    $siblingStmt->execute();
+    $siblingStmt->bind_result($siblingCode);
+    $hasSibling = $siblingStmt->fetch();
+    $siblingStmt->close();
+
+    $joinCode = ($hasSibling && $siblingCode) ? $siblingCode : null;
+
+    if (!$joinCode) {
+        $alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        $max = strlen($alphabet) - 1;
+        for ($attempt = 0; $attempt < 10; $attempt++) {
+            $candidate = '';
+            for ($i = 0; $i < 6; $i++) {
+                $candidate .= $alphabet[random_int(0, $max)];
+            }
+            $check = $mysqli->prepare('SELECT id FROM subjects WHERE join_code = ? LIMIT 1');
+            $check->bind_param('s', $candidate);
+            $check->execute();
+            $check->store_result();
+            $isUnique = $check->num_rows === 0;
+            $check->close();
+            if ($isUnique) {
+                $joinCode = $candidate;
+                break;
+            }
+        }
+        if (!$joinCode) {
+            return null;
+        }
+    }
+
+    $updateStmt = $mysqli->prepare('UPDATE subjects SET join_code = ? WHERE teacher_id <=> ? AND section_id = ? AND code = ?');
+    $updateStmt->bind_param('siis', $joinCode, $ref['teacher_id'], $ref['section_id'], $ref['code']);
+    $updateStmt->execute();
+    $updateStmt->close();
+
+    return $joinCode;
 }
 
 function createUserAccountFor($mysqli, $role, $baseUsername, $email, &$plainPassword) {
@@ -448,6 +711,7 @@ function saveStudentRecord($mysqli, $postData, $files, $allowedSectionIds = null
     $yearLevel = sanitize($postData['year_level'] ?? '');
     $sectionId = intval($postData['section_id'] ?? 0);
     $guardian = sanitize($postData['guardian'] ?? '');
+    $guardianEmail = sanitize($postData['guardian_email'] ?? '');
     $phone = sanitize($postData['phone'] ?? '');
     $email = sanitize($postData['email'] ?? '');
     $status = sanitize($postData['status'] ?? 'active');
@@ -484,20 +748,20 @@ function saveStudentRecord($mysqli, $postData, $files, $allowedSectionIds = null
     }
     if ($id) {
         $qrToken = $studentId;
-        $stmt = $mysqli->prepare('UPDATE students SET student_id = ?, first_name = ?, last_name = ?, gender = ?, birthday = ?, course_id = ?, year_level = ?, section_id = ?, guardian_name = ?, phone = ?, email = ?, status = ?, qr_code = ?' . ($photo ? ', photo = ?' : '') . ' WHERE id = ?');
+        $stmt = $mysqli->prepare('UPDATE students SET student_id = ?, first_name = ?, last_name = ?, gender = ?, birthday = ?, course_id = ?, year_level = ?, section_id = ?, guardian_name = ?, guardian_email = ?, phone = ?, email = ?, status = ?, qr_code = ?' . ($photo ? ', photo = ?' : '') . ' WHERE id = ?');
         if ($photo) {
-            $stmt->bind_param('sssssisissssssi', $studentId, $firstName, $lastName, $gender, $birthdayParam, $courseIdParam, $yearLevel, $sectionIdParam, $guardian, $phone, $email, $status, $qrToken, $photo, $id);
+            $stmt->bind_param('sssssisisssssssi', $studentId, $firstName, $lastName, $gender, $birthdayParam, $courseIdParam, $yearLevel, $sectionIdParam, $guardian, $guardianEmail, $phone, $email, $status, $qrToken, $photo, $id);
         } else {
-            $stmt->bind_param('sssssisisssssi', $studentId, $firstName, $lastName, $gender, $birthdayParam, $courseIdParam, $yearLevel, $sectionIdParam, $guardian, $phone, $email, $status, $qrToken, $id);
+            $stmt->bind_param('sssssisissssssi', $studentId, $firstName, $lastName, $gender, $birthdayParam, $courseIdParam, $yearLevel, $sectionIdParam, $guardian, $guardianEmail, $phone, $email, $status, $qrToken, $id);
         }
         $stmt->execute();
         $stmt->close();
         return ['success' => true, 'message' => 'Student updated successfully.', 'type' => 'success', 'credentials' => null];
     }
 
-    $stmt = $mysqli->prepare('INSERT INTO students (student_id, first_name, last_name, gender, birthday, course_id, year_level, section_id, guardian_name, phone, email, status, photo, qr_code, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())');
+    $stmt = $mysqli->prepare('INSERT INTO students (student_id, first_name, last_name, gender, birthday, course_id, year_level, section_id, guardian_name, guardian_email, phone, email, status, photo, qr_code, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())');
     $qrToken = $studentId;
-    $stmt->bind_param('sssssisissssss', $studentId, $firstName, $lastName, $gender, $birthdayParam, $courseIdParam, $yearLevel, $sectionIdParam, $guardian, $phone, $email, $status, $photo, $qrToken);
+    $stmt->bind_param('sssssisisssssss', $studentId, $firstName, $lastName, $gender, $birthdayParam, $courseIdParam, $yearLevel, $sectionIdParam, $guardian, $guardianEmail, $phone, $email, $status, $photo, $qrToken);
     $stmt->execute();
     $stmt->close();
     $newId = $mysqli->insert_id;

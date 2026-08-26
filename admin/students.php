@@ -257,6 +257,10 @@ require_once __DIR__ . '/../includes/admin_header.php';
                         <input type="text" class="form-control" name="guardian" id="guardianField">
                     </div>
                     <div class="col-md-6">
+                        <label class="form-label">Guardian Email</label>
+                        <input type="email" class="form-control" name="guardian_email" id="guardianEmailField" placeholder="For attendance alerts">
+                    </div>
+                    <div class="col-md-6">
                         <label class="form-label">Phone</label>
                         <input type="text" class="form-control" name="phone" id="phoneField">
                     </div>
@@ -320,6 +324,7 @@ editButtons.forEach(btn => {
         document.getElementById('genderField').value = data.gender;
         document.getElementById('birthdayField').value = data.birthday;
         document.getElementById('guardianField').value = data.guardian_name;
+        document.getElementById('guardianEmailField').value = data.guardian_email;
         document.getElementById('phoneField').value = data.phone;
         document.getElementById('emailField').value = data.email;
         document.getElementById('courseField').value = data.course_id;
