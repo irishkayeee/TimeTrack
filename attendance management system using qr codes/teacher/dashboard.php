@@ -5,13 +5,13 @@ $pageTitle = 'Teacher Dashboard';
 require_once __DIR__ . '/../includes/header.php';
 $totalStudents = $mysqli->query('SELECT COUNT(*) FROM students')->fetch_row()[0];
 $todayAttendance = $mysqli->query("SELECT COUNT(*) FROM attendance WHERE date = CURDATE()")->fetch_row()[0];
-$myAssigned = $mysqli->query('SELECT COUNT(*) FROM sections')->fetch_row()[0];
+$myAssigned = $mysqli->query('SELECT COUNT(*) FROM rooms')->fetch_row()[0];
 ?>
 <div class="container-fluid py-4">
     <div class="row g-3">
         <div class="col-md-4">
             <div class="card shadow-sm rounded-4 p-3">
-                <h6>Assigned Sections</h6>
+                <h6>Assigned Rooms</h6>
                 <h2><?php echo $myAssigned; ?></h2>
             </div>
         </div>

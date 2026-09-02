@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/functions.php';
 requireRole(['admin', 'superadmin']);
-$pageTitle = 'Sections';
+$pageTitle = 'Rooms';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verifyCsrf($_POST['csrf_token'] ?? '')) {
@@ -11,36 +11,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($_POST['action'] === 'save_section') {
         $id = intval($_POST['id'] ?? 0);
         $yearLevel = sanitize($_POST['year_level'] ?? '');
-        $sectionName = sanitize($_POST['section_name'] ?? '');
+        $roomName = sanitize($_POST['section_name'] ?? '');
         $courseId = intval($_POST['course_id'] ?? 0);
-        $adviser = sanitize($_POST['adviser'] ?? '');
+        $adviserId = intval($_POST['adviser_id'] ?? 0);
         if ($id) {
-            $stmt = $mysqli->prepare('UPDATE sections SET year_level = ?, section_name = ?, course_id = ?, adviser = ? WHERE id = ?');
-            $stmt->bind_param('ssisi', $yearLevel, $sectionName, $courseId, $adviser, $id);
+            $stmt = $mysqli->prepare('UPDATE rooms SET year_level = ?, room_name = ?, course_id = ?, adviser_id = ? WHERE id = ?');
+            $stmt->bind_param('ssiii', $yearLevel, $roomName, $courseId, $adviserId, $id);
             $stmt->execute();
             $stmt->close();
-            flash('Section updated.', 'success');
+            flash('Room updated.', 'success');
         } else {
-            $stmt = $mysqli->prepare('INSERT INTO sections (year_level, section_name, course_id, adviser, created_at) VALUES (?, ?, ?, ?, NOW())');
-            $stmt->bind_param('ssis', $yearLevel, $sectionName, $courseId, $adviser);
+            $stmt = $mysqli->prepare('INSERT INTO rooms (year_level, room_name, course_id, adviser_id, created_at) VALUES (?, ?, ?, ?, NOW())');
+            $stmt->bind_param('sii', $yearLevel, $roomName, $courseId, $adviserId);
             $stmt->execute();
             $stmt->close();
-            flash('Section created.', 'success');
+            flash('Room created.', 'success');
         }
         redirect('sections.php');
     }
     if ($_POST['action'] === 'delete_section' && !empty($_POST['section_id'])) {
         $id = intval($_POST['section_id']);
-        $stmt = $mysqli->prepare('DELETE FROM sections WHERE id = ?');
+        $stmt = $mysqli->prepare('DELETE FROM rooms WHERE id = ?');
         $stmt->bind_param('i', $id);
         $stmt->execute();
         $stmt->close();
-        flash('Section removed.', 'success');
+        flash('Room removed.', 'success');
         redirect('sections.php');
     }
 }
 $courses = $mysqli->query('SELECT id, code FROM courses ORDER BY code');
-$sections = $mysqli->query('SELECT sec.*, c.code AS course_code FROM sections sec LEFT JOIN courses c ON sec.course_id = c.id ORDER BY sec.created_at DESC');
+$rooms = $mysqli->query('SELECT sec.*, c.code AS course_code, CONCAT(t.first_name, " ", t.last_name) AS adviser_name FROM rooms sec LEFT JOIN courses c ON sec.course_id = c.id LEFT JOIN teachers t ON sec.adviser_id = t.id ORDER BY sec.created_at DESC');
 require_once __DIR__ . '/../includes/header.php';
 require_once __DIR__ . '/../includes/admin_nav.php';
 ?>
@@ -52,15 +52,15 @@ require_once __DIR__ . '/../includes/admin_nav.php';
     <div class="table-responsive">
         <table class="table table-hover" id="sectionsTable">
             <thead class="table-light">
-                <tr><th>Year</th><th>Section</th><th>Course</th><th>Adviser</th><th>Actions</th></tr>
+                <tr><th>Year</th><th>Room</th><th>Course</th><th>Adviser</th><th>Actions</th></tr>
             </thead>
             <tbody>
-                <?php while ($row = $sections->fetch_assoc()): ?>
+                <?php while ($row = $rooms->fetch_assoc()): ?>
                     <tr>
                         <td><?php echo htmlspecialchars($row['year_level']); ?></td>
-                        <td><?php echo htmlspecialchars($row['section_name']); ?></td>
+                        <td><?php echo htmlspecialchars($row['room_name']); ?></td>
                         <td><?php echo htmlspecialchars($row['course_code']); ?></td>
-                        <td><?php echo htmlspecialchars($row['adviser']); ?></td>
+                        <td><?php echo htmlspecialchars($row['adviser_name']); ?></td>
                         <td>
                             <button class="btn btn-sm btn-outline-primary btn-edit-section" data-data='<?php echo json_encode($row); ?>'>Edit</button>
                             <form method="post" class="d-inline-block" onsubmit="return confirm('Delete this section?');">
@@ -95,7 +95,7 @@ require_once __DIR__ . '/../includes/admin_nav.php';
                         <input type="text" class="form-control" name="year_level" id="sectionYearField" required>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Section Name</label>
+                        <label class="form-label">Room Name</label>
                         <input type="text" class="form-control" name="section_name" id="sectionNameField" required>
                     </div>
                     <div class="mb-3">
@@ -109,7 +109,13 @@ require_once __DIR__ . '/../includes/admin_nav.php';
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Adviser</label>
-                        <input type="text" class="form-control" name="adviser" id="sectionAdviserField">
+                        <select class="form-select" name="adviser_id" id="sectionAdviserField">
+                            <option value="0">Unassigned</option>
+                            <?php $advisers = $mysqli->query('SELECT id, first_name, last_name FROM teachers ORDER BY first_name, last_name'); ?>
+                            <?php while ($teacher = $advisers->fetch_assoc()): ?>
+                                <option value="<?php echo $teacher['id']; ?>"><?php echo htmlspecialchars($teacher['first_name'] . ' ' . $teacher['last_name']); ?></option>
+                            <?php endwhile; ?>
+                        </select>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -129,7 +135,7 @@ document.querySelectorAll('.btn-edit-section').forEach(btn => {
         document.getElementById('sectionYearField').value = data.year_level;
         document.getElementById('sectionNameField').value = data.section_name;
         document.getElementById('sectionCourseField').value = data.course_id;
-        document.getElementById('sectionAdviserField').value = data.adviser;
+        document.getElementById('sectionAdviserField').value = data.adviser_id;
         sectionModal.show();
     });
 });

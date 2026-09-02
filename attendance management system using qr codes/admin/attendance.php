@@ -5,7 +5,7 @@ $pageTitle = 'Attendance Records';
 
 $date = sanitize($_GET['date'] ?? date('Y-m-d'));
 $courseId = intval($_GET['course_id'] ?? 0);
-$sectionId = intval($_GET['section_id'] ?? 0);
+$roomId = intval($_GET['room_id'] ?? 0);
 $studentQuery = sanitize($_GET['student'] ?? '');
 
 $where = ['1=1'];
@@ -21,10 +21,10 @@ if ($courseId) {
     $types .= 'i';
     $params[] = $courseId;
 }
-if ($sectionId) {
-    $where[] = 'a.section_id = ?';
+if ($roomId) {
+    $where[] = 'a.room_id = ?';
     $types .= 'i';
-    $params[] = $sectionId;
+    $params[] = $roomId;
 }
 if ($studentQuery) {
     $where[] = '(s.first_name LIKE ? OR s.last_name LIKE ? OR s.student_id LIKE ?)';
@@ -40,7 +40,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'export') {
     header('Content-Disposition: attachment; filename="attendance_export_' . date('Ymd_His') . '.csv"');
     $output = fopen('php://output', 'w');
     fputcsv($output, ['Student ID','Student Name','Course','Section','Status','Date','Time']);
-    $query = 'SELECT s.student_id, CONCAT(s.first_name, " ", s.last_name) AS full_name, c.code AS course_code, sec.section_name, a.status, a.date, a.time FROM attendance a LEFT JOIN students s ON a.student_id = s.id LEFT JOIN courses c ON a.course_id = c.id LEFT JOIN sections sec ON a.section_id = sec.id WHERE ' . $whereSql . ' ORDER BY a.created_at DESC';
+    $query = 'SELECT s.student_id, CONCAT(s.first_name, " ", s.last_name) AS full_name, c.code AS course_code, sec.room_name, a.status, a.date, a.time FROM attendance a LEFT JOIN students s ON a.student_id = s.id LEFT JOIN courses c ON a.course_id = c.id LEFT JOIN rooms sec ON a.room_id = sec.id WHERE ' . $whereSql . ' ORDER BY a.created_at DESC';
     $stmt = $mysqli->prepare($query);
     if ($params) {
         $stmt->bind_param($types, ...$params);
@@ -48,15 +48,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'export') {
     $stmt->execute();
     $result = $stmt->get_result();
     while ($row = $result->fetch_assoc()) {
-        fputcsv($output, [$row['student_id'], $row['full_name'], $row['course_code'], $row['section_name'], $row['status'], $row['date'], $row['time']]);
+        fputcsv($output, [$row['student_id'], $row['full_name'], $row['course_code'], $row['room_name'], $row['status'], $row['date'], $row['time']]);
     }
     fclose($output);
     exit;
 }
 
 $courses = $mysqli->query('SELECT id, code FROM courses ORDER BY code');
-$sections = $mysqli->query('SELECT id, section_name FROM sections ORDER BY section_name');
-$query = 'SELECT a.*, s.student_id, CONCAT(s.first_name, " ", s.last_name) AS student_name, c.code AS course_code, sec.section_name FROM attendance a LEFT JOIN students s ON a.student_id = s.id LEFT JOIN courses c ON a.course_id = c.id LEFT JOIN sections sec ON a.section_id = sec.id WHERE ' . $whereSql . ' ORDER BY a.created_at DESC';
+$rooms = $mysqli->query('SELECT id, room_name FROM rooms ORDER BY room_name');
+$query = 'SELECT a.*, s.student_id, CONCAT(s.first_name, " ", s.last_name) AS student_name, c.code AS course_code, sec.room_name FROM attendance a LEFT JOIN students s ON a.student_id = s.id LEFT JOIN courses c ON a.course_id = c.id LEFT JOIN rooms sec ON a.room_id = sec.id WHERE ' . $whereSql . ' ORDER BY a.created_at DESC';
 $stmt = $mysqli->prepare($query);
 if ($params) {
     $stmt->bind_param($types, ...$params);
@@ -90,11 +90,11 @@ require_once __DIR__ . '/../includes/admin_nav.php';
             </select>
         </div>
         <div class="col-md-3">
-            <label class="form-label">Section</label>
-            <select class="form-select" name="section_id">
-                <option value="">All sections</option>
-                <?php while ($section = $sections->fetch_assoc()): ?>
-                    <option value="<?php echo $section['id']; ?>" <?php echo $sectionId == $section['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($section['section_name']); ?></option>
+            <label class="form-label">Room</label>
+            <select class="form-select" name="room_id">
+                <option value="">All rooms</option>
+                <?php while ($room = $rooms->fetch_assoc()): ?>
+                    <option value="<?php echo $room['id']; ?>" <?php echo $roomId == $room['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($room['room_name']); ?></option>
                 <?php endwhile; ?>
             </select>
         </div>
@@ -127,7 +127,7 @@ require_once __DIR__ . '/../includes/admin_nav.php';
                         <td><?php echo htmlspecialchars($row['student_name']); ?></td>
                         <td><?php echo htmlspecialchars($row['student_id']); ?></td>
                         <td><?php echo htmlspecialchars($row['course_code']); ?></td>
-                        <td><?php echo htmlspecialchars($row['section_name']); ?></td>
+                        <td><?php echo htmlspecialchars($row['room_name']); ?></td>
                         <td><?php echo badgeStatus($row['status']); ?></td>
                     </tr>
                 <?php endwhile; ?>

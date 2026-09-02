@@ -11,9 +11,9 @@ $absentToday = $mysqli->query("SELECT COUNT(*) FROM attendance WHERE date = CURD
 $lateToday = $mysqli->query("SELECT COUNT(*) FROM attendance WHERE date = CURDATE() AND status = 'late'")->fetch_row()[0];
 $teachersCount = $mysqli->query('SELECT COUNT(*) FROM teachers')->fetch_row()[0];
 $coursesCount = $mysqli->query('SELECT COUNT(*) FROM courses')->fetch_row()[0];
-$sectionsCount = $mysqli->query('SELECT COUNT(*) FROM sections')->fetch_row()[0];
+$roomsCount = $mysqli->query('SELECT COUNT(*) FROM rooms')->fetch_row()[0];
 $attendanceToday = $mysqli->query("SELECT COUNT(*) FROM attendance WHERE date = CURDATE()") ->fetch_row()[0];
-$recentAttendance = $mysqli->query("SELECT a.*, s.first_name, s.last_name, c.code AS course_code, sec.section_name FROM attendance a LEFT JOIN students s ON a.student_id = s.id LEFT JOIN courses c ON a.course_id = c.id LEFT JOIN sections sec ON a.section_id = sec.id ORDER BY a.created_at DESC LIMIT 8");
+$recentAttendance = $mysqli->query("SELECT a.*, s.first_name, s.last_name, c.code AS course_code, sec.room_name FROM attendance a LEFT JOIN students s ON a.student_id = s.id LEFT JOIN courses c ON a.course_id = c.id LEFT JOIN rooms sec ON a.room_id = sec.id ORDER BY a.created_at DESC LIMIT 8");
 ?>
 <div class="container-fluid py-4">
     <div class="row g-3">
@@ -70,7 +70,7 @@ $recentAttendance = $mysqli->query("SELECT a.*, s.first_name, s.last_name, c.cod
                 <ul class="list-group list-group-flush">
                     <li class="list-group-item d-flex justify-content-between align-items-center">Teachers<span class="badge bg-primary rounded-pill"><?php echo $teachersCount; ?></span></li>
                     <li class="list-group-item d-flex justify-content-between align-items-center">Courses<span class="badge bg-primary rounded-pill"><?php echo $coursesCount; ?></span></li>
-                    <li class="list-group-item d-flex justify-content-between align-items-center">Sections<span class="badge bg-primary rounded-pill"><?php echo $sectionsCount; ?></span></li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">Rooms<span class="badge bg-primary rounded-pill"><?php echo $roomsCount; ?></span></li>
                     <li class="list-group-item d-flex justify-content-between align-items-center">Attendance Today<span class="badge bg-primary rounded-pill"><?php echo $attendanceToday; ?></span></li>
                 </ul>
             </div>
@@ -119,7 +119,7 @@ $recentAttendance = $mysqli->query("SELECT a.*, s.first_name, s.last_name, c.cod
                                 <tr>
                                     <td><?php echo htmlspecialchars($row['first_name'] . ' ' . $row['last_name']); ?></td>
                                     <td><?php echo htmlspecialchars($row['course_code']); ?></td>
-                                    <td><?php echo htmlspecialchars($row['section_name']); ?></td>
+                                    <td><?php echo htmlspecialchars($row['room_name']); ?></td>
                                     <td><?php echo badgeStatus($row['status']); ?></td>
                                     <td><?php echo date('M j, h:i A', strtotime($row['created_at'])); ?></td>
                                 </tr>

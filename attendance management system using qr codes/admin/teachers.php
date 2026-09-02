@@ -14,19 +14,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $firstName = sanitize($_POST['first_name'] ?? '');
         $lastName = sanitize($_POST['last_name'] ?? '');
         $subject = sanitize($_POST['subject'] ?? '');
-        $sectionId = intval($_POST['section_id'] ?? 0);
+        $roomId = intval($_POST['room_id'] ?? 0);
         $phone = sanitize($_POST['phone'] ?? '');
         $email = sanitize($_POST['email'] ?? '');
         $status = sanitize($_POST['status'] ?? 'active');
         if ($id) {
-            $stmt = $mysqli->prepare('UPDATE teachers SET teacher_id = ?, first_name = ?, last_name = ?, subject = ?, section_id = ?, phone = ?, email = ?, status = ? WHERE id = ?');
-            $stmt->bind_param('ssssiissi', $teacherId, $firstName, $lastName, $subject, $sectionId, $phone, $email, $status, $id);
+            $stmt = $mysqli->prepare('UPDATE teachers SET teacher_id = ?, first_name = ?, last_name = ?, subject = ?, room_id = ?, phone = ?, email = ?, status = ? WHERE id = ?');
+            $stmt->bind_param('ssssiissi', $teacherId, $firstName, $lastName, $subject, $roomId, $phone, $email, $status, $id);
             $stmt->execute();
             $stmt->close();
             flash('Teacher updated successfully.', 'success');
         } else {
-            $stmt = $mysqli->prepare('INSERT INTO teachers (teacher_id, first_name, last_name, subject, section_id, phone, email, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())');
-            $stmt->bind_param('ssssiiss', $teacherId, $firstName, $lastName, $subject, $sectionId, $phone, $email, $status);
+            $stmt = $mysqli->prepare('INSERT INTO teachers (teacher_id, first_name, last_name, subject, room_id, phone, email, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())');
+            $stmt->bind_param('ssssiiss', $teacherId, $firstName, $lastName, $subject, $roomId, $phone, $email, $status);
             $stmt->execute();
             $stmt->close();
             flash('Teacher added successfully.', 'success');
@@ -44,8 +44,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 $courses = $mysqli->query('SELECT id, code FROM courses ORDER BY code');
-$sections = $mysqli->query('SELECT id, section_name FROM sections ORDER BY section_name');
-$teachers = $mysqli->query('SELECT t.*, sec.section_name FROM teachers t LEFT JOIN sections sec ON t.section_id = sec.id ORDER BY t.created_at DESC');
+$rooms = $mysqli->query('SELECT id, room_name FROM rooms ORDER BY room_name');
+$teachers = $mysqli->query('SELECT t.*, sec.room_name FROM teachers t LEFT JOIN rooms sec ON t.room_id = sec.id ORDER BY t.created_at DESC');
 require_once __DIR__ . '/../includes/header.php';
 require_once __DIR__ . '/../includes/admin_nav.php';
 ?>
@@ -72,7 +72,7 @@ require_once __DIR__ . '/../includes/admin_nav.php';
                         <td><?php echo htmlspecialchars($row['teacher_id']); ?></td>
                         <td><?php echo htmlspecialchars($row['first_name'] . ' ' . $row['last_name']); ?></td>
                         <td><?php echo htmlspecialchars($row['subject']); ?></td>
-                        <td><?php echo htmlspecialchars($row['section_name']); ?></td>
+                        <td><?php echo htmlspecialchars($row['room_name']); ?></td>
                         <td><?php echo badgeStatus($row['status']); ?></td>
                         <td>
                             <button class="btn btn-sm btn-outline-primary btn-edit-teacher" data-data='<?php echo json_encode($row); ?>'>Edit</button>
@@ -128,11 +128,11 @@ require_once __DIR__ . '/../includes/admin_nav.php';
                         <input type="text" class="form-control" name="phone" id="teacherPhoneField">
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label">Section</label>
-                        <select class="form-select" name="section_id" id="teacherSectionField">
+                        <label class="form-label">Room</label>
+                        <select class="form-select" name="room_id" id="teacherRoomField">
                             <option value="0">Unassigned</option>
-                            <?php while ($section = $sections->fetch_assoc()): ?>
-                                <option value="<?php echo $section['id']; ?>"><?php echo htmlspecialchars($section['section_name']); ?></option>
+                            <?php while ($room = $rooms->fetch_assoc()): ?>
+                                <option value="<?php echo $room['id']; ?>"><?php echo htmlspecialchars($room['room_name']); ?></option>
                             <?php endwhile; ?>
                         </select>
                     </div>
@@ -164,7 +164,7 @@ document.querySelectorAll('.btn-edit-teacher').forEach(btn => {
         document.getElementById('teacherLastNameField').value = data.last_name;
         document.getElementById('teacherEmailField').value = data.email;
         document.getElementById('teacherPhoneField').value = data.phone;
-        document.getElementById('teacherSectionField').value = data.section_id;
+        document.getElementById('teacherRoomField').value = data.room_id;
         document.getElementById('teacherStatusField').value = data.status;
         teacherModal.show();
     });

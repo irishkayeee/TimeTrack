@@ -17,7 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $birthday = sanitize($_POST['birthday'] ?? '');
         $courseId = intval($_POST['course_id'] ?? 0);
         $yearLevel = sanitize($_POST['year_level'] ?? '');
-        $sectionId = intval($_POST['section_id'] ?? 0);
+        $roomId = intval($_POST['room_id'] ?? 0);
         $guardian = sanitize($_POST['guardian'] ?? '');
         $phone = sanitize($_POST['phone'] ?? '');
         $email = sanitize($_POST['email'] ?? '');
@@ -36,19 +36,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         if ($id) {
             $qrToken = $studentId;
-            $stmt = $mysqli->prepare('UPDATE students SET student_id = ?, first_name = ?, last_name = ?, gender = ?, birthday = ?, course_id = ?, year_level = ?, section_id = ?, guardian_name = ?, phone = ?, email = ?, status = ?, qr_code = ?' . ($photo ? ', photo = ?' : '') . ' WHERE id = ?');
+            $stmt = $mysqli->prepare('UPDATE students SET student_id = ?, first_name = ?, last_name = ?, gender = ?, birthday = ?, course_id = ?, year_level = ?, room_id = ?, guardian_name = ?, phone = ?, email = ?, status = ?, qr_code = ?' . ($photo ? ', photo = ?' : '') . ' WHERE id = ?');
             if ($photo) {
-                $stmt->bind_param('sssssisissssssi', $studentId, $firstName, $lastName, $gender, $birthday, $courseId, $yearLevel, $sectionId, $guardian, $phone, $email, $status, $qrToken, $photo, $id);
+                $stmt->bind_param('sssssisissssssi', $studentId, $firstName, $lastName, $gender, $birthday, $courseId, $yearLevel, $roomId, $guardian, $phone, $email, $status, $qrToken, $photo, $id);
             } else {
-                $stmt->bind_param('sssssisisssssi', $studentId, $firstName, $lastName, $gender, $birthday, $courseId, $yearLevel, $sectionId, $guardian, $phone, $email, $status, $qrToken, $id);
+                $stmt->bind_param('sssssisisssssi', $studentId, $firstName, $lastName, $gender, $birthday, $courseId, $yearLevel, $roomId, $guardian, $phone, $email, $status, $qrToken, $id);
             }
             $stmt->execute();
             $stmt->close();
             flash('Student updated successfully.', 'success');
         } else {
-            $stmt = $mysqli->prepare('INSERT INTO students (student_id, first_name, last_name, gender, birthday, course_id, year_level, section_id, guardian_name, phone, email, status, photo, qr_code, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())');
+            $stmt = $mysqli->prepare('INSERT INTO students (student_id, first_name, last_name, gender, birthday, course_id, year_level, room_id, guardian_name, phone, email, status, photo, qr_code, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())');
             $qrToken = $studentId;
-            $stmt->bind_param('sssssisissssss', $studentId, $firstName, $lastName, $gender, $birthday, $courseId, $yearLevel, $sectionId, $guardian, $phone, $email, $status, $photo, $qrToken);
+            $stmt->bind_param('sssssisissssss', $studentId, $firstName, $lastName, $gender, $birthday, $courseId, $yearLevel, $roomId, $guardian, $phone, $email, $status, $photo, $qrToken);
             $stmt->execute();
             $stmt->close();
             flash('Student added successfully.', 'success');
@@ -79,7 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $birthday = sanitize($data[4] ?? '');
             $courseId = intval($data[5] ?? 0);
             $yearLevel = sanitize($data[6] ?? '');
-            $sectionId = intval($data[7] ?? 0);
+            $roomId = intval($data[7] ?? 0);
             $guardian = sanitize($data[8] ?? '');
             $phone = sanitize($data[9] ?? '');
             $email = sanitize($data[10] ?? '');
@@ -88,8 +88,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $studentId = 'S' . time() . rand(10,99);
             }
             $qrToken = $studentId;
-            $stmt = $mysqli->prepare('INSERT INTO students (student_id, first_name, last_name, gender, birthday, course_id, year_level, section_id, guardian_name, phone, email, status, qr_code, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())');
-            $stmt->bind_param('sssssiissssss', $studentId, $firstName, $lastName, $gender, $birthday, $courseId, $yearLevel, $sectionId, $guardian, $phone, $email, $status, $qrToken);
+            $stmt = $mysqli->prepare('INSERT INTO students (student_id, first_name, last_name, gender, birthday, course_id, year_level, room_id, guardian_name, phone, email, status, qr_code, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())');
+            $stmt->bind_param('sssssiissssss', $studentId, $firstName, $lastName, $gender, $birthday, $courseId, $yearLevel, $roomId, $guardian, $phone, $email, $status, $qrToken);
             $stmt->execute();
             $stmt->close();
         }
@@ -102,7 +102,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Content-Disposition: attachment; filename="students_export_' . date('Ymd') . '.csv"');
         $output = fopen('php://output', 'w');
         fputcsv($output, ['Student ID','First Name','Last Name','Gender','Birthday','Course ID','Year Level','Section ID','Guardian','Phone','Email','Status']);
-        $result = $mysqli->query('SELECT student_id, first_name, last_name, gender, birthday, course_id, year_level, section_id, guardian_name, phone, email, status FROM students');
+        $result = $mysqli->query('SELECT student_id, first_name, last_name, gender, birthday, course_id, year_level, room_id, guardian_name, phone, email, status FROM students');
         while ($row = $result->fetch_assoc()) {
             fputcsv($output, $row);
         }
@@ -112,8 +112,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $courses = $mysqli->query('SELECT id, code, name FROM courses ORDER BY name');
-$sections = $mysqli->query('SELECT id, section_name FROM sections ORDER BY section_name');
-$students = $mysqli->query('SELECT s.*, c.code AS course_code, sec.section_name FROM students s LEFT JOIN courses c ON s.course_id = c.id LEFT JOIN sections sec ON s.section_id = sec.id ORDER BY s.created_at DESC');
+$rooms = $mysqli->query('SELECT id, room_name FROM rooms ORDER BY room_name');
+$students = $mysqli->query('SELECT s.*, c.code AS course_code, sec.room_name FROM students s LEFT JOIN courses c ON s.course_id = c.id LEFT JOIN rooms sec ON s.room_id = sec.id ORDER BY s.created_at DESC');
 require_once __DIR__ . '/../includes/header.php';
 require_once __DIR__ . '/../includes/admin_nav.php';
 ?>
@@ -142,7 +142,7 @@ require_once __DIR__ . '/../includes/admin_nav.php';
                         <td><?php echo htmlspecialchars($row['student_id']); ?></td>
                         <td><?php echo htmlspecialchars($row['first_name'] . ' ' . $row['last_name']); ?></td>
                         <td><?php echo htmlspecialchars($row['course_code']); ?></td>
-                        <td><?php echo htmlspecialchars($row['section_name']); ?></td>
+                        <td><?php echo htmlspecialchars($row['room_name']); ?></td>
                         <td><?php echo badgeStatus($row['status']); ?></td>
                         <td>
                             <button class="btn btn-sm btn-outline-primary btn-edit" data-data='<?php echo json_encode($row); ?>'>Edit</button>
@@ -245,10 +245,10 @@ require_once __DIR__ . '/../includes/admin_nav.php';
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Section</label>
-                        <select class="form-select" name="section_id" id="sectionField">
+                        <select class="form-select" name="room_id" id="roomField">
                             <option value="0">Unassigned</option>
-                            <?php while ($section = $sections->fetch_assoc()): ?>
-                                <option value="<?php echo $section['id']; ?>"><?php echo htmlspecialchars($section['section_name']); ?></option>
+                            <?php while ($room = $rooms->fetch_assoc()): ?>
+                                <option value="<?php echo $room['id']; ?>"><?php echo htmlspecialchars($room['room_name']); ?></option>
                             <?php endwhile; ?>
                         </select>
                     </div>
@@ -289,7 +289,7 @@ editButtons.forEach(btn => {
         document.getElementById('emailField').value = data.email;
         document.getElementById('courseField').value = data.course_id;
         document.getElementById('yearField').value = data.year_level;
-        document.getElementById('sectionField').value = data.section_id;
+        document.getElementById('roomField').value = data.room_id;
         document.getElementById('statusField').value = data.status;
         studentModal.show();
     });

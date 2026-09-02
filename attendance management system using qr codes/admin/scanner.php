@@ -46,7 +46,7 @@ function showScanResult(data, status) {
             <p><strong>Name:</strong> ${data.first_name} ${data.last_name}</p>
             <p><strong>ID:</strong> ${data.student_id}</p>
             <p><strong>Course:</strong> ${data.course_code || 'N/A'}</p>
-            <p><strong>Section:</strong> ${data.section_name || 'N/A'}</p>
+            <p><strong>Room:</strong> ${data.room_name || 'N/A'}</p>
         ` : ''}
     `;
     scanResult.classList.remove('d-none');

@@ -3,7 +3,7 @@ require_once __DIR__ . '/../includes/functions.php';
 requireRole(['teacher']);
 $pageTitle = 'Teacher Attendance';
 $date = sanitize($_GET['date'] ?? date('Y-m-d')); 
-$records = $mysqli->prepare('SELECT a.*, s.student_id, CONCAT(s.first_name, " ", s.last_name) AS student_name, c.code AS course_code, sec.section_name FROM attendance a LEFT JOIN students s ON a.student_id = s.id LEFT JOIN courses c ON a.course_id = c.id LEFT JOIN sections sec ON a.section_id = sec.id WHERE a.date = ? ORDER BY a.created_at DESC');
+$records = $mysqli->prepare('SELECT a.*, s.student_id, CONCAT(s.first_name, " ", s.last_name) AS student_name, c.code AS course_code, sec.room_name FROM attendance a LEFT JOIN students s ON a.student_id = s.id LEFT JOIN courses c ON a.course_id = c.id LEFT JOIN rooms sec ON a.room_id = sec.id WHERE a.date = ? ORDER BY a.created_at DESC');
 $records->bind_param('s', $date);
 $records->execute();
 $result = $records->get_result();
@@ -31,7 +31,7 @@ require_once __DIR__ . '/../includes/teacher_nav.php';
                         <td><?php echo htmlspecialchars($row['student_name']); ?></td>
                         <td><?php echo htmlspecialchars($row['student_id']); ?></td>
                         <td><?php echo htmlspecialchars($row['course_code']); ?></td>
-                        <td><?php echo htmlspecialchars($row['section_name']); ?></td>
+                        <td><?php echo htmlspecialchars($row['room_name']); ?></td>
                         <td><?php echo badgeStatus($row['status']); ?></td>
                     </tr>
                 <?php endwhile; ?>
