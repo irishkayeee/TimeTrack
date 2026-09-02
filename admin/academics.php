@@ -27,10 +27,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($_POST['action'] === 'create_student_credentials' && !empty($_POST['student_id'])) {
         $sid = intval($_POST['student_id']);
-        $stmt = $mysqli->prepare('SELECT student_id, user_id, email FROM students WHERE id = ?');
+        $stmt = $mysqli->prepare('SELECT student_id, user_id, email, first_name, last_name FROM students WHERE id = ?');
         $stmt->bind_param('i', $sid);
         $stmt->execute();
-        $stmt->bind_result($studentCode, $linkedUserId, $studentEmail);
+        $stmt->bind_result($studentCode, $linkedUserId, $studentEmail, $studentFirstName, $studentLastName);
         if ($stmt->fetch()) {
             $stmt->close();
             if ($linkedUserId) {
@@ -43,6 +43,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $stmt2->bind_param('ii', $userId, $sid);
                     $stmt2->execute();
                     $stmt2->close();
+                    if ($studentEmail) {
+                        emailStudentCredentials($studentEmail, trim($studentFirstName . ' ' . $studentLastName), $studentCode, $plainPassword);
+                    }
                     flashCredentials($studentCode, $plainPassword);
                 } else {
                     flash('Unable to create a login account (email may already be in use).', 'danger');
@@ -68,7 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $birthday = sanitize($data[4] ?? '');
             $courseId = intval($data[5] ?? 0);
             $yearLevel = sanitize($data[6] ?? '');
-            $sectionId = intval($data[7] ?? 0);
+            $roomId = intval($data[7] ?? 0);
             $guardian = sanitize($data[8] ?? '');
             $phone = sanitize($data[9] ?? '');
             $email = sanitize($data[10] ?? '');
@@ -77,8 +80,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $studentId = 'S' . time() . rand(10, 99);
             }
             $qrToken = $studentId;
-            $stmt = $mysqli->prepare('INSERT INTO students (student_id, first_name, last_name, gender, birthday, course_id, year_level, section_id, guardian_name, phone, email, status, qr_code, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())');
-            $stmt->bind_param('sssssiissssss', $studentId, $firstName, $lastName, $gender, $birthday, $courseId, $yearLevel, $sectionId, $guardian, $phone, $email, $status, $qrToken);
+            $stmt = $mysqli->prepare('INSERT INTO students (student_id, first_name, last_name, gender, birthday, course_id, year_level, room_id, guardian_name, phone, email, status, qr_code, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())');
+            $stmt->bind_param('sssssiissssss', $studentId, $firstName, $lastName, $gender, $birthday, $courseId, $yearLevel, $roomId, $guardian, $phone, $email, $status, $qrToken);
             $stmt->execute();
             $stmt->close();
         }
@@ -90,8 +93,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Content-Type: text/csv');
         header('Content-Disposition: attachment; filename="students_export_' . date('Ymd') . '.csv"');
         $output = fopen('php://output', 'w');
-        fputcsv($output, ['Student ID', 'First Name', 'Last Name', 'Gender', 'Birthday', 'Course ID', 'Year Level', 'Section ID', 'Guardian', 'Phone', 'Email', 'Status']);
-        $result = $mysqli->query('SELECT student_id, first_name, last_name, gender, birthday, course_id, year_level, section_id, guardian_name, phone, email, status FROM students');
+        fputcsv($output, ['Student ID', 'First Name', 'Last Name', 'Gender', 'Birthday', 'Course ID', 'Year Level', 'Room ID', 'Guardian', 'Phone', 'Email', 'Status']);
+        $result = $mysqli->query('SELECT student_id, first_name, last_name, gender, birthday, course_id, year_level, room_id, guardian_name, phone, email, status FROM students');
         while ($row = $result->fetch_assoc()) {
             fputcsv($output, $row);
         }
@@ -99,12 +102,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
     if ($_POST['action'] === 'export_students_pdf') {
-        $result = $mysqli->query('SELECT s.student_id, s.first_name, s.last_name, c.code AS course_code, sec.section_name, s.year_level, s.status FROM students s LEFT JOIN courses c ON s.course_id = c.id LEFT JOIN sections sec ON s.section_id = sec.id ORDER BY s.last_name');
+        $result = $mysqli->query('SELECT s.student_id, s.first_name, s.last_name, c.code AS course_code, sec.room_name, s.year_level, s.status FROM students s LEFT JOIN courses c ON s.course_id = c.id LEFT JOIN rooms sec ON s.room_id = sec.id ORDER BY s.last_name');
         $rows = [];
         while ($row = $result->fetch_assoc()) {
-            $rows[] = [$row['student_id'], $row['first_name'] . ' ' . $row['last_name'], $row['course_code'] ?: '-', $row['year_level'] ?: '-', $row['section_name'] ?: '-', ucfirst($row['status'])];
+            $rows[] = [$row['student_id'], $row['first_name'] . ' ' . $row['last_name'], $row['course_code'] ?: '-', $row['year_level'] ?: '-', $row['room_name'] ?: '-', ucfirst($row['status'])];
         }
-        $pdf = generateSimpleTablePdf('Student List', ['ID', 'Name', 'Course', 'Year', 'Section', 'Status'], $rows, [80, 180, 90, 60, 90, 80]);
+        $pdf = generateSimpleTablePdf('Student List', ['ID', 'Name', 'Course', 'Year', 'Room', 'Status'], $rows, [80, 180, 90, 60, 90, 80]);
         header('Content-Type: application/pdf');
         header('Content-Disposition: attachment; filename="students_export_' . date('Ymd') . '.pdf"');
         header('Content-Length: ' . strlen($pdf));
@@ -119,19 +122,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $firstName = sanitize($_POST['first_name'] ?? '');
         $lastName = sanitize($_POST['last_name'] ?? '');
         $subject = sanitize($_POST['subject'] ?? '');
-        $sectionId = intval($_POST['section_id'] ?? 0) ?: null;
+        $roomId = intval($_POST['room_id'] ?? 0) ?: null;
         $phone = sanitize($_POST['phone'] ?? '');
         $email = sanitize($_POST['email'] ?? '');
         $status = sanitize($_POST['status'] ?? 'active');
         if ($id) {
-            $stmt = $mysqli->prepare('UPDATE teachers SET teacher_id = ?, first_name = ?, last_name = ?, subject = ?, section_id = ?, phone = ?, email = ?, status = ? WHERE id = ?');
-            $stmt->bind_param('ssssisssi', $teacherId, $firstName, $lastName, $subject, $sectionId, $phone, $email, $status, $id);
+            $stmt = $mysqli->prepare('UPDATE teachers SET teacher_id = ?, first_name = ?, last_name = ?, subject = ?, room_id = ?, phone = ?, email = ?, status = ? WHERE id = ?');
+            $stmt->bind_param('ssssisssi', $teacherId, $firstName, $lastName, $subject, $roomId, $phone, $email, $status, $id);
             $stmt->execute();
             $stmt->close();
             flash('Teacher updated successfully.', 'success');
         } else {
-            $stmt = $mysqli->prepare('INSERT INTO teachers (teacher_id, first_name, last_name, subject, section_id, phone, email, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())');
-            $stmt->bind_param('ssssisss', $teacherId, $firstName, $lastName, $subject, $sectionId, $phone, $email, $status);
+            $stmt = $mysqli->prepare('INSERT INTO teachers (teacher_id, first_name, last_name, subject, room_id, phone, email, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())');
+            $stmt->bind_param('ssssisss', $teacherId, $firstName, $lastName, $subject, $roomId, $phone, $email, $status);
             $stmt->execute();
             $stmt->close();
             $newTeacherId = $mysqli->insert_id;
@@ -230,36 +233,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('academics.php');
     }
 
-    // ---- Sections ----
-    if ($_POST['action'] === 'save_section') {
+    // ---- Rooms ----
+    if ($_POST['action'] === 'save_room') {
         $id = intval($_POST['id'] ?? 0);
         $yearLevel = sanitize($_POST['year_level'] ?? '');
-        $sectionName = sanitize($_POST['section_name'] ?? '');
+        $roomName = sanitize($_POST['room_name'] ?? '');
         $courseId = intval($_POST['course_id'] ?? 0);
         $adviserId = intval($_POST['adviser_id'] ?? 0);
         $adviserIdParam = $adviserId ?: null;
         if ($id) {
-            $stmt = $mysqli->prepare('UPDATE sections SET year_level = ?, section_name = ?, course_id = ?, adviser_id = ? WHERE id = ?');
-            $stmt->bind_param('ssiii', $yearLevel, $sectionName, $courseId, $adviserIdParam, $id);
+            $stmt = $mysqli->prepare('UPDATE rooms SET year_level = ?, room_name = ?, course_id = ?, adviser_id = ? WHERE id = ?');
+            $stmt->bind_param('ssiii', $yearLevel, $roomName, $courseId, $adviserIdParam, $id);
             $stmt->execute();
             $stmt->close();
-            flash('Section updated.', 'success');
+            flash('Room updated.', 'success');
         } else {
-            $stmt = $mysqli->prepare('INSERT INTO sections (year_level, section_name, course_id, adviser_id, created_at) VALUES (?, ?, ?, ?, NOW())');
-            $stmt->bind_param('ssii', $yearLevel, $sectionName, $courseId, $adviserIdParam);
+            $stmt = $mysqli->prepare('INSERT INTO rooms (year_level, room_name, course_id, adviser_id, created_at) VALUES (?, ?, ?, ?, NOW())');
+            $stmt->bind_param('ssii', $yearLevel, $roomName, $courseId, $adviserIdParam);
             $stmt->execute();
             $stmt->close();
-            flash('Section created.', 'success');
+            flash('Room created.', 'success');
         }
         redirect('academics.php');
     }
-    if ($_POST['action'] === 'delete_section' && !empty($_POST['section_id'])) {
-        $id = intval($_POST['section_id']);
-        $stmt = $mysqli->prepare('DELETE FROM sections WHERE id = ?');
+    if ($_POST['action'] === 'delete_room' && !empty($_POST['room_id'])) {
+        $id = intval($_POST['room_id']);
+        $stmt = $mysqli->prepare('DELETE FROM rooms WHERE id = ?');
         $stmt->bind_param('i', $id);
         $stmt->execute();
         $stmt->close();
-        flash('Section removed.', 'success');
+        flash('Room removed.', 'success');
         redirect('academics.php');
     }
 
@@ -269,7 +272,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $code = sanitize($_POST['code'] ?? '');
         $name = sanitize($_POST['name'] ?? '');
         $teacherId = intval($_POST['teacher_id'] ?? 0);
-        $sectionId = intval($_POST['section_id'] ?? 0);
+        $roomId = intval($_POST['room_id'] ?? 0);
         $allowedDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
         $postedDays = is_array($_POST['day_of_week'] ?? null) ? $_POST['day_of_week'] : [$_POST['day_of_week'] ?? 'Mon'];
         $days = array_values(array_intersect($allowedDays, array_map('sanitize', $postedDays)));
@@ -279,7 +282,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $startTime = sanitize($_POST['start_time'] ?? '07:30');
         $endTime = sanitize($_POST['end_time'] ?? '');
         $endTimeParam = $endTime ?: null;
-        $room = sanitize($_POST['room'] ?? '');
+        $subjectRoom = sanitize($_POST['subject_room'] ?? '');
         $creditUnits = intval($_POST['credit_units'] ?? 0) ?: null;
         $importantNote = sanitize($_POST['important_note'] ?? '');
         $importantNoteParam = $importantNote ?: null;
@@ -299,8 +302,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($id) {
             $firstDay = $days[0];
-            $stmt = $mysqli->prepare('UPDATE subjects SET code = ?, name = ?, teacher_id = ?, section_id = ?, day_of_week = ?, start_time = ?, end_time = ?, room = ?, credit_units = ?, important_note = ?, status = ? WHERE id = ?');
-            $stmt->bind_param('ssiissssissi', $code, $name, $teacherIdParam, $sectionId, $firstDay, $startTime, $endTimeParam, $room, $creditUnits, $importantNoteParam, $status, $id);
+            $stmt = $mysqli->prepare('UPDATE subjects SET code = ?, name = ?, teacher_id = ?, room_id = ?, day_of_week = ?, start_time = ?, end_time = ?, subject_room = ?, credit_units = ?, important_note = ?, status = ? WHERE id = ?');
+            $stmt->bind_param('ssiissssissi', $code, $name, $teacherIdParam, $roomId, $firstDay, $startTime, $endTimeParam, $subjectRoom, $creditUnits, $importantNoteParam, $status, $id);
             $stmt->execute();
             $stmt->close();
             $extraDays = array_slice($days, 1);
@@ -309,8 +312,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         foreach ($extraDays as $day) {
-            $stmt = $mysqli->prepare('INSERT INTO subjects (code, name, teacher_id, section_id, day_of_week, start_time, end_time, room, credit_units, important_note, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())');
-            $stmt->bind_param('ssiissssiss', $code, $name, $teacherIdParam, $sectionId, $day, $startTime, $endTimeParam, $room, $creditUnits, $importantNoteParam, $status);
+            $stmt = $mysqli->prepare('INSERT INTO subjects (code, name, teacher_id, room_id, day_of_week, start_time, end_time, subject_room, credit_units, important_note, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())');
+            $stmt->bind_param('ssiissssiss', $code, $name, $teacherIdParam, $roomId, $day, $startTime, $endTimeParam, $subjectRoom, $creditUnits, $importantNoteParam, $status);
             $stmt->execute();
             $stmt->close();
         }
@@ -334,14 +337,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $courseOptions = $mysqli->query('SELECT id, code, name FROM courses ORDER BY name')->fetch_all(MYSQLI_ASSOC);
-$sectionOptions = $mysqli->query('SELECT id, section_name FROM sections ORDER BY section_name')->fetch_all(MYSQLI_ASSOC);
-$sectionOptionsWithYear = $mysqli->query('SELECT id, section_name, year_level FROM sections ORDER BY section_name')->fetch_all(MYSQLI_ASSOC);
+$roomOptions = $mysqli->query('SELECT id, room_name FROM rooms ORDER BY room_name')->fetch_all(MYSQLI_ASSOC);
+$roomOptionsWithYear = $mysqli->query('SELECT id, room_name, year_level FROM rooms ORDER BY room_name')->fetch_all(MYSQLI_ASSOC);
 $activeTeachers = $mysqli->query("SELECT id, first_name, last_name FROM teachers WHERE status = 'active' ORDER BY first_name")->fetch_all(MYSQLI_ASSOC);
-$students = $mysqli->query('SELECT s.*, c.code AS course_code, sec.section_name FROM students s LEFT JOIN courses c ON s.course_id = c.id LEFT JOIN sections sec ON s.section_id = sec.id ORDER BY s.created_at DESC');
-$teachers = $mysqli->query('SELECT t.*, sec.section_name FROM teachers t LEFT JOIN sections sec ON t.section_id = sec.id ORDER BY t.created_at DESC');
+$students = $mysqli->query('SELECT s.*, c.code AS course_code, sec.room_name FROM students s LEFT JOIN courses c ON s.course_id = c.id LEFT JOIN rooms sec ON s.room_id = sec.id ORDER BY s.created_at DESC');
+$teachers = $mysqli->query('SELECT t.*, sec.room_name FROM teachers t LEFT JOIN rooms sec ON t.room_id = sec.id ORDER BY t.created_at DESC');
 $courseList = $mysqli->query('SELECT * FROM courses ORDER BY code');
-$sectionList = $mysqli->query('SELECT sec.*, c.code AS course_code, CONCAT(t.first_name, " ", t.last_name) AS adviser_name FROM sections sec LEFT JOIN courses c ON sec.course_id = c.id LEFT JOIN teachers t ON sec.adviser_id = t.id ORDER BY sec.created_at DESC');
-$subjectList = $mysqli->query('SELECT sub.*, CONCAT(t.first_name, " ", t.last_name) AS teacher_name, sec.section_name FROM subjects sub LEFT JOIN teachers t ON sub.teacher_id = t.id LEFT JOIN sections sec ON sub.section_id = sec.id ORDER BY sub.created_at DESC');
+$roomList = $mysqli->query('SELECT sec.*, c.code AS course_code, CONCAT(t.first_name, " ", t.last_name) AS adviser_name FROM rooms sec LEFT JOIN courses c ON sec.course_id = c.id LEFT JOIN teachers t ON sec.adviser_id = t.id ORDER BY sec.created_at DESC');
+$subjectList = $mysqli->query('SELECT sub.*, CONCAT(t.first_name, " ", t.last_name) AS teacher_name, sec.room_name FROM subjects sub LEFT JOIN teachers t ON sub.teacher_id = t.id LEFT JOIN rooms sec ON sub.room_id = sec.id ORDER BY sub.created_at DESC');
 $newCredentials = flashCredentialsMessage();
 require_once __DIR__ . '/../includes/admin_header.php';
 ?>
@@ -382,7 +385,7 @@ require_once __DIR__ . '/../includes/admin_header.php';
         <button class="nav-link" id="courses-tab" data-bs-toggle="tab" data-bs-target="#tab-courses" type="button" role="tab">Courses</button>
     </li>
     <li class="nav-item" role="presentation">
-        <button class="nav-link" id="sections-tab" data-bs-toggle="tab" data-bs-target="#tab-sections" type="button" role="tab">Sections</button>
+        <button class="nav-link" id="rooms-tab" data-bs-toggle="tab" data-bs-target="#tab-rooms" type="button" role="tab">Rooms</button>
     </li>
     <li class="nav-item" role="presentation">
         <button class="nav-link" id="subjects-tab" data-bs-toggle="tab" data-bs-target="#tab-subjects" type="button" role="tab">Subjects</button>
@@ -401,10 +404,10 @@ require_once __DIR__ . '/../includes/admin_header.php';
                             <option value="<?php echo htmlspecialchars($course['code']); ?>"><?php echo htmlspecialchars($course['code']); ?></option>
                         <?php endforeach; ?>
                     </select>
-                    <select class="form-select form-select-sm sp-filter-select" id="studentSectionFilter" style="width:auto;">
-                        <option value="">All Sections</option>
-                        <?php foreach ($sectionOptions as $section): ?>
-                            <option value="<?php echo htmlspecialchars($section['section_name']); ?>"><?php echo htmlspecialchars($section['section_name']); ?></option>
+                    <select class="form-select form-select-sm sp-filter-select" id="studentRoomFilter" style="width:auto;">
+                        <option value="">All Rooms</option>
+                        <?php foreach ($roomOptions as $room): ?>
+                            <option value="<?php echo htmlspecialchars($room['room_name']); ?>"><?php echo htmlspecialchars($room['room_name']); ?></option>
                         <?php endforeach; ?>
                     </select>
                     <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#studentModal">Add Student</button>
@@ -418,7 +421,7 @@ require_once __DIR__ . '/../includes/admin_header.php';
                             <th>ID</th>
                             <th>Name</th>
                             <th>Course</th>
-                            <th>Section</th>
+                            <th>Room</th>
                             <th>Status</th>
                             <th>Created</th>
                             <th>Actions</th>
@@ -437,7 +440,7 @@ require_once __DIR__ . '/../includes/admin_header.php';
                                 <td><?php echo htmlspecialchars($row['student_id']); ?></td>
                                 <td><?php echo htmlspecialchars($row['first_name'] . ' ' . $row['last_name']); ?></td>
                                 <td><?php echo htmlspecialchars($row['course_code']); ?></td>
-                                <td><?php echo htmlspecialchars($row['section_name']); ?></td>
+                                <td><?php echo htmlspecialchars($row['room_name']); ?></td>
                                 <td><?php echo badgeStatus($row['status']); ?></td>
                                 <td><?php echo date('M j, Y', strtotime($row['created_at'])); ?></td>
                                 <td>
@@ -511,7 +514,7 @@ require_once __DIR__ . '/../includes/admin_header.php';
                             <th>Teacher ID</th>
                             <th>Name</th>
                             <th>Subject</th>
-                            <th>Section</th>
+                            <th>Room</th>
                             <th>Status</th>
                             <th>Created</th>
                             <th>Actions</th>
@@ -530,7 +533,7 @@ require_once __DIR__ . '/../includes/admin_header.php';
                                 <td><?php echo htmlspecialchars($row['teacher_id']); ?></td>
                                 <td><?php echo htmlspecialchars($row['first_name'] . ' ' . $row['last_name']); ?></td>
                                 <td><?php echo htmlspecialchars($row['subject']); ?></td>
-                                <td><?php echo htmlspecialchars($row['section_name'] ?? ''); ?></td>
+                                <td><?php echo htmlspecialchars($row['room_name'] ?? ''); ?></td>
                                 <td><?php echo badgeStatus($row['status']); ?></td>
                                 <td><?php echo date('M j, Y', strtotime($row['created_at'])); ?></td>
                                 <td>
@@ -597,32 +600,32 @@ require_once __DIR__ . '/../includes/admin_header.php';
         </div>
     </div>
 
-    <div class="tab-pane fade" id="tab-sections" role="tabpanel">
+    <div class="tab-pane fade" id="tab-rooms" role="tabpanel">
         <div class="card rounded-4 shadow-sm p-4">
             <div class="d-flex justify-content-between align-items-center mb-3">
-                <h6>Section Management</h6>
-                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#sectionModal">Add Section</button>
+                <h6>Room Management</h6>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#roomModal">Add Room</button>
             </div>
             <div class="table-responsive">
-                <table class="table table-hover" id="sectionsTable">
+                <table class="table table-hover" id="roomsTable">
                     <thead class="table-light">
-                        <tr><th>Year</th><th>Section</th><th>Course</th><th>Adviser</th><th>Actions</th></tr>
+                        <tr><th>Year</th><th>Room</th><th>Course</th><th>Adviser</th><th>Actions</th></tr>
                     </thead>
                     <tbody>
-                        <?php while ($row = $sectionList->fetch_assoc()): ?>
+                        <?php while ($row = $roomList->fetch_assoc()): ?>
                             <tr>
                                 <td><?php echo htmlspecialchars($row['year_level']); ?></td>
-                                <td><?php echo htmlspecialchars($row['section_name']); ?></td>
+                                <td><?php echo htmlspecialchars($row['room_name']); ?></td>
                                 <td><?php echo htmlspecialchars($row['course_code']); ?></td>
                                 <td><?php echo htmlspecialchars($row['adviser_name'] ?: 'Unassigned'); ?></td>
                                 <td>
                                     <div class="d-flex align-items-center gap-1">
-                                        <button class="btn btn-sm btn-outline-primary btn-icon btn-edit-section" data-data='<?php echo json_encode($row); ?>' title="Edit"><i class="fa-solid fa-pen"></i></button>
+                                        <button class="btn btn-sm btn-outline-primary btn-icon btn-edit-room" data-data='<?php echo json_encode($row); ?>' title="Edit"><i class="fa-solid fa-pen"></i></button>
                                         <form method="post" class="d-inline-block">
                                             <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
-                                            <input type="hidden" name="action" value="delete_section">
-                                            <input type="hidden" name="section_id" value="<?php echo $row['id']; ?>">
-                                            <button type="button" class="btn btn-sm btn-outline-danger btn-icon js-confirm-submit" data-message="Delete this section?" title="Delete"><i class="fa-solid fa-trash"></i></button>
+                                            <input type="hidden" name="action" value="delete_room">
+                                            <input type="hidden" name="room_id" value="<?php echo $row['id']; ?>">
+                                            <button type="button" class="btn btn-sm btn-outline-danger btn-icon js-confirm-submit" data-message="Delete this room?" title="Delete"><i class="fa-solid fa-trash"></i></button>
                                         </form>
                                     </div>
                                 </td>
@@ -649,7 +652,7 @@ require_once __DIR__ . '/../includes/admin_header.php';
             <div class="table-responsive">
                 <table class="table table-hover" id="subjectsTable">
                     <thead class="table-light">
-                        <tr><th>Code</th><th>Name</th><th>Teacher</th><th>Section</th><th>Day</th><th>Time</th><th>Room</th><th>Status</th><th>Actions</th></tr>
+                        <tr><th>Code</th><th>Name</th><th>Teacher</th><th>Room</th><th>Day</th><th>Time</th><th>Subject Room</th><th>Status</th><th>Actions</th></tr>
                     </thead>
                     <tbody>
                         <?php while ($row = $subjectList->fetch_assoc()): ?>
@@ -657,10 +660,10 @@ require_once __DIR__ . '/../includes/admin_header.php';
                                 <td><?php echo htmlspecialchars($row['code']); ?></td>
                                 <td><?php echo htmlspecialchars($row['name']); ?></td>
                                 <td><?php echo htmlspecialchars($row['teacher_name'] ?: 'Unassigned'); ?></td>
-                                <td><?php echo htmlspecialchars($row['section_name']); ?></td>
+                                <td><?php echo htmlspecialchars($row['room_name']); ?></td>
                                 <td><?php echo htmlspecialchars($row['day_of_week']); ?></td>
                                 <td><?php echo formatTime($row['start_time']); ?><?php echo $row['end_time'] ? ' - ' . formatTime($row['end_time']) : ''; ?></td>
-                                <td><?php echo htmlspecialchars($row['room'] ?: '—'); ?></td>
+                                <td><?php echo htmlspecialchars($row['subject_room'] ?: '—'); ?></td>
                                 <td><?php echo badgeStatus($row['status']); ?></td>
                                 <td>
                                     <div class="d-flex align-items-center gap-1">
@@ -743,11 +746,11 @@ require_once __DIR__ . '/../includes/admin_header.php';
                         <input type="text" class="form-control" name="year_level" id="yearField">
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label">Section</label>
-                        <select class="form-select" name="section_id" id="sectionField">
+                        <label class="form-label">Room</label>
+                        <select class="form-select" name="room_id" id="roomField">
                             <option value="0">Unassigned</option>
-                            <?php foreach ($sectionOptions as $section): ?>
-                                <option value="<?php echo $section['id']; ?>"><?php echo htmlspecialchars($section['section_name']); ?></option>
+                            <?php foreach ($roomOptions as $room): ?>
+                                <option value="<?php echo $room['id']; ?>"><?php echo htmlspecialchars($room['room_name']); ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
@@ -816,11 +819,11 @@ require_once __DIR__ . '/../includes/admin_header.php';
                         <input type="text" class="form-control" name="subject" id="subjectField" required>
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label">Section</label>
-                        <select class="form-select" name="section_id" id="teacherSectionField">
+                        <label class="form-label">Room</label>
+                        <select class="form-select" name="room_id" id="teacherRoomField">
                             <option value="0">Unassigned</option>
-                            <?php foreach ($sectionOptions as $section): ?>
-                                <option value="<?php echo $section['id']; ?>"><?php echo htmlspecialchars($section['section_name']); ?></option>
+                            <?php foreach ($roomOptions as $room): ?>
+                                <option value="<?php echo $room['id']; ?>"><?php echo htmlspecialchars($room['room_name']); ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
@@ -849,7 +852,7 @@ require_once __DIR__ . '/../includes/admin_header.php';
                     <dt class="col-5">Teacher Code</dt><dd class="col-7" id="viewTeacherCode"></dd>
                     <dt class="col-5">Name</dt><dd class="col-7" id="viewTeacherName"></dd>
                     <dt class="col-5">Subject</dt><dd class="col-7" id="viewTeacherSubject"></dd>
-                    <dt class="col-5">Section</dt><dd class="col-7" id="viewTeacherSection"></dd>
+                    <dt class="col-5">Room</dt><dd class="col-7" id="viewTeacherRoom"></dd>
                     <dt class="col-5">Status</dt><dd class="col-7" id="viewTeacherStatus"></dd>
                     <dt class="col-5">Email</dt><dd class="col-7" id="viewTeacherEmail"></dd>
                     <dt class="col-5">Phone</dt><dd class="col-7" id="viewTeacherPhone"></dd>
@@ -897,29 +900,29 @@ require_once __DIR__ . '/../includes/admin_header.php';
     </div>
 </div>
 
-<div class="modal fade" id="sectionModal" tabindex="-1" aria-hidden="true">
+<div class="modal fade" id="roomModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content rounded-4">
             <div class="modal-header">
-                <h5 class="modal-title">Section Form</h5>
+                <h5 class="modal-title">Room Form</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <form method="post">
                 <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
-                <input type="hidden" name="action" value="save_section">
-                <input type="hidden" name="id" id="sectionIdField">
+                <input type="hidden" name="action" value="save_room">
+                <input type="hidden" name="id" id="roomIdField">
                 <div class="modal-body">
                     <div class="mb-3">
                         <label class="form-label">Year Level</label>
-                        <input type="text" class="form-control" name="year_level" id="sectionYearField" required>
+                        <input type="text" class="form-control" name="year_level" id="roomYearField" required>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Section Name</label>
-                        <input type="text" class="form-control" name="section_name" id="sectionNameField" required>
+                        <label class="form-label">Room Name</label>
+                        <input type="text" class="form-control" name="room_name" id="roomNameField" required>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Course</label>
-                        <select class="form-select" name="course_id" id="sectionCourseField">
+                        <select class="form-select" name="course_id" id="roomCourseField">
                             <option value="0">Select Course</option>
                             <?php foreach ($courseOptions as $course): ?>
                                 <option value="<?php echo $course['id']; ?>"><?php echo htmlspecialchars($course['code']); ?></option>
@@ -928,7 +931,7 @@ require_once __DIR__ . '/../includes/admin_header.php';
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Adviser</label>
-                        <select class="form-select" name="adviser_id" id="sectionAdviserField">
+                        <select class="form-select" name="adviser_id" id="roomAdviserField">
                             <option value="0">Unassigned</option>
                             <?php foreach ($activeTeachers as $teacher): ?>
                                 <option value="<?php echo $teacher['id']; ?>"><?php echo htmlspecialchars($teacher['first_name'] . ' ' . $teacher['last_name']); ?></option>
@@ -938,7 +941,7 @@ require_once __DIR__ . '/../includes/admin_header.php';
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Save Section</button>
+                    <button type="submit" class="btn btn-primary">Save Room</button>
                 </div>
             </form>
         </div>
@@ -975,10 +978,10 @@ require_once __DIR__ . '/../includes/admin_header.php';
                         </select>
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label">Section</label>
-                        <select class="form-select" name="section_id" id="subjectSectionField" required>
-                            <?php foreach ($sectionOptionsWithYear as $section): ?>
-                                <option value="<?php echo $section['id']; ?>"><?php echo htmlspecialchars($section['year_level'] . ' - ' . $section['section_name']); ?></option>
+                        <label class="form-label">Room</label>
+                        <select class="form-select" name="room_id" id="subjectRoomField" required>
+                            <?php foreach ($roomOptionsWithYear as $room): ?>
+                                <option value="<?php echo $room['id']; ?>"><?php echo htmlspecialchars($room['year_level'] . ' - ' . $room['room_name']); ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
@@ -1003,8 +1006,8 @@ require_once __DIR__ . '/../includes/admin_header.php';
                         <input type="time" class="form-control" name="end_time" id="subjectEndTimeField">
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label">Room</label>
-                        <input type="text" class="form-control" name="room" id="subjectRoomField" placeholder="e.g. IT Lab 1">
+                        <label class="form-label">Subject Room</label>
+                        <input type="text" class="form-control" name="subject_room" id="subjectRoomField" placeholder="e.g. IT Lab 1">
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Credit Units</label>
@@ -1048,7 +1051,7 @@ document.querySelectorAll('.btn-edit').forEach(btn => {
         document.getElementById('emailField').value = data.email;
         document.getElementById('courseField').value = data.course_id;
         document.getElementById('yearField').value = data.year_level;
-        document.getElementById('sectionField').value = data.section_id;
+        document.getElementById('roomField').value = data.room_id;
         document.getElementById('statusField').value = data.status;
         studentModal.show();
     });
@@ -1072,7 +1075,7 @@ document.querySelectorAll('.btn-view-teacher').forEach(btn => {
         document.getElementById('viewTeacherCode').textContent = data.teacher_id || '—';
         document.getElementById('viewTeacherName').textContent = `${data.first_name || ''} ${data.last_name || ''}`.trim() || '—';
         document.getElementById('viewTeacherSubject').textContent = data.subject || '—';
-        document.getElementById('viewTeacherSection').textContent = data.section_name || 'Unassigned';
+        document.getElementById('viewTeacherRoom').textContent = data.room_name || 'Unassigned';
         document.getElementById('viewTeacherStatus').innerHTML = `<span class="badge bg-${statusBadgeClass[data.status] || 'secondary'}">${(data.status || '').charAt(0).toUpperCase() + (data.status || '').slice(1)}</span>`;
         document.getElementById('viewTeacherEmail').textContent = data.email || '—';
         document.getElementById('viewTeacherPhone').textContent = data.phone || '—';
@@ -1099,7 +1102,7 @@ document.querySelectorAll('.btn-edit-teacher').forEach(btn => {
         document.getElementById('teacherLastNameField').value = data.last_name;
         document.getElementById('teacherEmailField').value = data.email;
         document.getElementById('teacherPhoneField').value = data.phone;
-        document.getElementById('teacherSectionField').value = data.section_id;
+        document.getElementById('teacherRoomField').value = data.room_id;
         document.getElementById('teacherStatusField').value = data.status;
         teacherModal.show();
     });
@@ -1117,16 +1120,16 @@ document.querySelectorAll('.btn-edit-course').forEach(btn => {
     });
 });
 
-const sectionModal = new bootstrap.Modal(document.getElementById('sectionModal'));
-document.querySelectorAll('.btn-edit-section').forEach(btn => {
+const roomModal = new bootstrap.Modal(document.getElementById('roomModal'));
+document.querySelectorAll('.btn-edit-room').forEach(btn => {
     btn.addEventListener('click', () => {
         const data = JSON.parse(btn.getAttribute('data-data'));
-        document.getElementById('sectionIdField').value = data.id;
-        document.getElementById('sectionYearField').value = data.year_level;
-        document.getElementById('sectionNameField').value = data.section_name;
-        document.getElementById('sectionCourseField').value = data.course_id;
-        document.getElementById('sectionAdviserField').value = data.adviser_id || '0';
-        sectionModal.show();
+        document.getElementById('roomIdField').value = data.id;
+        document.getElementById('roomYearField').value = data.year_level;
+        document.getElementById('roomNameField').value = data.room_name;
+        document.getElementById('roomCourseField').value = data.course_id;
+        document.getElementById('roomAdviserField').value = data.adviser_id || '0';
+        roomModal.show();
     });
 });
 
@@ -1138,13 +1141,13 @@ document.querySelectorAll('.btn-edit-subject').forEach(btn => {
         document.getElementById('subjectCodeField').value = data.code;
         document.getElementById('subjectNameField').value = data.name;
         document.getElementById('subjectTeacherField').value = data.teacher_id || '0';
-        document.getElementById('subjectSectionField').value = data.section_id;
+        document.getElementById('subjectRoomField').value = data.room_id;
         document.querySelectorAll('#subjectDayField input[type="checkbox"]').forEach(function (cb) {
             cb.checked = cb.value === data.day_of_week;
         });
         document.getElementById('subjectStartTimeField').value = data.start_time;
         document.getElementById('subjectEndTimeField').value = data.end_time || '';
-        document.getElementById('subjectRoomField').value = data.room || '';
+        document.getElementById('subjectRoomField').value = data.subject_room || '';
         document.getElementById('subjectCreditUnitsField').value = data.credit_units || '';
         document.getElementById('subjectNoteField').value = data.important_note || '';
         document.getElementById('subjectStatusField').value = data.status;
@@ -1156,16 +1159,16 @@ var studentsTable = $('#studentsTable').DataTable({ responsive: true, paging: fa
 
 function applyStudentFilters() {
     var course = $('#studentCourseFilter').val();
-    var section = $('#studentSectionFilter').val();
+    var room = $('#studentRoomFilter').val();
     studentsTable.column(3).search(course ? '^' + $.fn.dataTable.util.escapeRegex(course) + '$' : '', true, false);
-    studentsTable.column(4).search(section ? '^' + $.fn.dataTable.util.escapeRegex(section) + '$' : '', true, false);
+    studentsTable.column(4).search(room ? '^' + $.fn.dataTable.util.escapeRegex(room) + '$' : '', true, false);
     studentsTable.draw();
 }
-$('#studentCourseFilter, #studentSectionFilter').on('change', applyStudentFilters);
+$('#studentCourseFilter, #studentRoomFilter').on('change', applyStudentFilters);
 
 $('#teachersTable').DataTable({ responsive: true, paging: false, ordering: false, dom: 'frt' });
 $('#coursesTable').DataTable({ responsive: true, paging: false, ordering: false, dom: 'frt' });
-$('#sectionsTable').DataTable({ responsive: true, paging: false, ordering: false, dom: 'frt' });
+$('#roomsTable').DataTable({ responsive: true, paging: false, ordering: false, dom: 'frt' });
 var subjectsTable = $('#subjectsTable').DataTable({ responsive: true, paging: false, ordering: false, dom: 'frt' });
 $('#subjectSearchInput').on('input', function () {
     subjectsTable.search(this.value).draw();

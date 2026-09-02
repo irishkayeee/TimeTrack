@@ -11,7 +11,7 @@
                 <a href="qr-generator.php" class="list-group-item list-group-item-action<?php echo $currentPage === 'qr-generator.php' ? ' active' : ''; ?>">QR Generator</a>
                 <a href="scanner.php" class="list-group-item list-group-item-action<?php echo $currentPage === 'scanner.php' ? ' active' : ''; ?>">Scanner</a>
                 <a href="courses.php" class="list-group-item list-group-item-action<?php echo $currentPage === 'courses.php' ? ' active' : ''; ?>">Courses</a>
-                <a href="sections.php" class="list-group-item list-group-item-action<?php echo $currentPage === 'sections.php' ? ' active' : ''; ?>">Sections</a>
+                <a href="rooms.php" class="list-group-item list-group-item-action<?php echo $currentPage === 'rooms.php' ? ' active' : ''; ?>">Rooms</a>
                 <a href="subjects.php" class="list-group-item list-group-item-action<?php echo $currentPage === 'subjects.php' ? ' active' : ''; ?>">Subjects</a>
                 <a href="reports.php" class="list-group-item list-group-item-action<?php echo $currentPage === 'reports.php' ? ' active' : ''; ?>">Reports</a>
                 <a href="settings.php" class="list-group-item list-group-item-action<?php echo $currentPage === 'settings.php' ? ' active' : ''; ?>">Settings</a>

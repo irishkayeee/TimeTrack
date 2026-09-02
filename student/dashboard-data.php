@@ -14,18 +14,18 @@ $subjectId = intval($_GET['subject_id'] ?? 0);
 $month = sanitize($_GET['month'] ?? 'all');
 $monthFilter = ($month !== 'all' && preg_match('/^\d{4}-\d{2}$/', $month)) ? $month : null;
 
-$stmt = $mysqli->prepare('SELECT section_id FROM students WHERE id = ?');
+$stmt = $mysqli->prepare('SELECT room_id FROM students WHERE id = ?');
 $stmt->bind_param('i', $studentDbId);
 $stmt->execute();
-$stmt->bind_result($sectionId);
+$stmt->bind_result($roomId);
 $stmt->fetch();
 $stmt->close();
 
 if ($type === 'subjects') {
     $result = ['labels' => [], 'data' => [], 'subjectIds' => []];
-    if ($sectionId) {
-        $stmt = $mysqli->prepare("SELECT id, code FROM subjects WHERE section_id = ? AND status = 'active' ORDER BY name");
-        $stmt->bind_param('i', $sectionId);
+    if ($roomId) {
+        $stmt = $mysqli->prepare("SELECT id, code FROM subjects WHERE room_id = ? AND status = 'active' ORDER BY name");
+        $stmt->bind_param('i', $roomId);
         $stmt->execute();
         $subjectsResult = $stmt->get_result();
         while ($subjectRow = $subjectsResult->fetch_assoc()) {

@@ -100,7 +100,7 @@
 #studentsTable td, #studentsTable th,
 #teachersTable td, #teachersTable th,
 #coursesTable td, #coursesTable th,
-#sectionsTable td, #sectionsTable th,
+#roomsTable td, #roomsTable th,
 #subjectsTable td, #subjectsTable th {
     padding: 0.55rem 0.6rem;
 }

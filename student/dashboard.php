@@ -10,11 +10,11 @@ if ($studentDbId === false) {
     redirect('../dashboard.php');
 }
 
-$stmt = $mysqli->prepare('SELECT s.first_name, s.section_id, c.code AS course_code, sec.section_name FROM students s LEFT JOIN courses c ON s.course_id = c.id LEFT JOIN sections sec ON s.section_id = sec.id WHERE s.id = ?');
+$stmt = $mysqli->prepare('SELECT s.first_name, s.room_id, c.code AS course_code, sec.room_name FROM students s LEFT JOIN courses c ON s.course_id = c.id LEFT JOIN rooms sec ON s.room_id = sec.id WHERE s.id = ?');
 $stmt->bind_param('i', $studentDbId);
 $stmt->execute();
 $me = $stmt->get_result()->fetch_assoc();
-$sectionId = $me['section_id'];
+$roomId = $me['room_id'];
 $stmt->close();
 
 $hour = (int) date('G');
@@ -34,11 +34,11 @@ while ($row = $monthsResult->fetch_assoc()) {
 $monthsStmt->close();
 
 // Attendance by Subject (bar chart) — every active subject in the student's
-// section, defaulting to 0% when there is no attendance history yet.
+// room, defaulting to 0% when there is no attendance history yet.
 $subjectRates = [];
-if ($sectionId) {
-    $stmt = $mysqli->prepare("SELECT id, code, name FROM subjects WHERE section_id = ? AND status = 'active' ORDER BY name");
-    $stmt->bind_param('i', $sectionId);
+if ($roomId) {
+    $stmt = $mysqli->prepare("SELECT id, code, name FROM subjects WHERE room_id = ? AND status = 'active' ORDER BY name");
+    $stmt->bind_param('i', $roomId);
     $stmt->execute();
     $subjectsResult = $stmt->get_result();
     while ($subjectRow = $subjectsResult->fetch_assoc()) {
@@ -54,13 +54,13 @@ if ($sectionId) {
     $stmt->close();
 }
 
-// Today's Classes — this student's section's schedule for today, with live status.
+// Today's Classes — this student's room's schedule for today, with live status.
 $dayMap = ['Mon' => 1, 'Tue' => 2, 'Wed' => 3, 'Thu' => 4, 'Fri' => 5, 'Sat' => 6, 'Sun' => 7];
 $todayCode = array_search((int) date('N'), $dayMap);
 $todayClasses = [];
-if ($sectionId) {
-    $stmt = $mysqli->prepare("SELECT sub.*, CONCAT(t.first_name, ' ', t.last_name) AS teacher_name FROM subjects sub LEFT JOIN teachers t ON sub.teacher_id = t.id WHERE sub.section_id = ? AND sub.day_of_week = ? AND sub.status = 'active' ORDER BY sub.start_time");
-    $stmt->bind_param('is', $sectionId, $todayCode);
+if ($roomId) {
+    $stmt = $mysqli->prepare("SELECT sub.*, CONCAT(t.first_name, ' ', t.last_name) AS teacher_name FROM subjects sub LEFT JOIN teachers t ON sub.teacher_id = t.id WHERE sub.room_id = ? AND sub.day_of_week = ? AND sub.status = 'active' ORDER BY sub.start_time");
+    $stmt->bind_param('is', $roomId, $todayCode);
     $stmt->execute();
     $todayResult = $stmt->get_result();
     while ($row = $todayResult->fetch_assoc()) {
@@ -124,7 +124,7 @@ require_once __DIR__ . '/../includes/student_header.php';
             <h4 class="mb-1"><span id="spGreetingWord"><?php echo htmlspecialchars($greeting); ?></span>, <?php echo htmlspecialchars($me['first_name']); ?>! 👋</h4>
             <p class="text-muted mb-2">Here's your attendance overview and class schedule.</p>
             <div class="d-flex flex-wrap gap-2">
-                <span class="sp-shd-pill"><i class="fa-solid fa-user-group"></i> <?php echo htmlspecialchars(trim(($me['course_code'] ?: 'N/A') . ' ' . ($me['section_name'] ?: ''))); ?></span>
+                <span class="sp-shd-pill"><i class="fa-solid fa-user-group"></i> <?php echo htmlspecialchars(trim(($me['course_code'] ?: 'N/A') . ' ' . ($me['room_name'] ?: ''))); ?></span>
                 <span class="sp-shd-pill"><i class="fa-solid fa-calendar"></i> <?php echo htmlspecialchars($semester . ', AY ' . $schoolYear); ?></span>
             </div>
         </div>
@@ -151,7 +151,7 @@ require_once __DIR__ . '/../includes/student_header.php';
             </div>
             <p class="text-muted small mb-2" style="font-size:0.75rem;"><i class="fa-solid fa-circle-info me-1"></i>Click a bar to filter the trend chart below by that subject.</p>
             <?php if (empty($subjectRates)): ?>
-                <p class="text-muted small mb-0">No subjects scheduled for your section yet.</p>
+                <p class="text-muted small mb-0">No subjects scheduled for your room yet.</p>
             <?php else: ?>
                 <div class="flex-grow-1 position-relative">
                     <canvas id="subjectRateChart"></canvas>
@@ -194,7 +194,7 @@ require_once __DIR__ . '/../includes/student_header.php';
                         </div>
                         <div class="flex-grow-1">
                             <div class="fw-semibold"><?php echo htmlspecialchars($row['name']); ?></div>
-                            <div class="text-muted small">Prof. <?php echo htmlspecialchars($row['teacher_name'] ?: 'Unassigned'); ?><?php echo $row['room'] ? ' · ' . htmlspecialchars($row['room']) : ''; ?></div>
+                            <div class="text-muted small">Prof. <?php echo htmlspecialchars($row['teacher_name'] ?: 'Unassigned'); ?><?php echo $row['subject_room'] ? ' · ' . htmlspecialchars($row['subject_room']) : ''; ?></div>
                         </div>
                         <?php if ($row['display_status'] === 'upcoming'): ?>
                             <span class="badge sp-badge-upcoming">Upcoming</span>
@@ -403,7 +403,7 @@ function spExportChartPdf(chartInstance, title) {
     doc.text('TimeTrack — ' + title, 40, 40);
     doc.setFontSize(10);
     doc.setTextColor(120, 120, 120);
-    doc.text('<?php echo htmlspecialchars(addslashes(($me['course_code'] ?: '') . ' ' . ($me['section_name'] ?: '') . ' — Generated ')); ?>' + new Date().toLocaleString('en-US'), 40, 58);
+    doc.text('<?php echo htmlspecialchars(addslashes(($me['course_code'] ?: '') . ' ' . ($me['room_name'] ?: '') . ' — Generated ')); ?>' + new Date().toLocaleString('en-US'), 40, 58);
 
     var imgWidth = pageWidth - 80;
     var imgHeight = chartInstance.height * (imgWidth / chartInstance.width);

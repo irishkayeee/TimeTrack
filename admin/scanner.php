@@ -10,20 +10,20 @@ if ($user['role'] === 'teacher') {
         flash('Your teacher profile is not set up. Contact an administrator.', 'danger');
         redirect('../dashboard.php');
     }
-    $subjectsStmt = $mysqli->prepare("SELECT sub.*, sec.section_name FROM subjects sub JOIN sections sec ON sub.section_id = sec.id WHERE sub.status = 'active' AND sub.teacher_id = ? ORDER BY sub.name");
+    $subjectsStmt = $mysqli->prepare("SELECT sub.*, sec.room_name FROM subjects sub JOIN rooms sec ON sub.room_id = sec.id WHERE sub.status = 'active' AND sub.teacher_id = ? ORDER BY sub.name");
     $subjectsStmt->bind_param('i', $teacherId);
     $subjectsStmt->execute();
     $subjects = $subjectsStmt->get_result();
 } else {
-    $subjects = $mysqli->query("SELECT sub.*, sec.section_name FROM subjects sub JOIN sections sec ON sub.section_id = sec.id WHERE sub.status = 'active' ORDER BY sub.name");
+    $subjects = $mysqli->query("SELECT sub.*, sec.room_name FROM subjects sub JOIN rooms sec ON sub.room_id = sec.id WHERE sub.status = 'active' ORDER BY sub.name");
 }
 
 $subjectId = intval($_GET['subject_id'] ?? 0);
 $activeSubject = null;
 if ($subjectId) {
-    $stmt = $mysqli->prepare("SELECT sub.*, sec.section_name, sec.year_level, c.code AS course_code, c.name AS course_name
+    $stmt = $mysqli->prepare("SELECT sub.*, sec.room_name, sec.year_level, c.code AS course_code, c.name AS course_name
         FROM subjects sub
-        JOIN sections sec ON sub.section_id = sec.id
+        JOIN rooms sec ON sub.room_id = sec.id
         JOIN courses c ON sec.course_id = c.id
         WHERE sub.id = ? AND sub.status = 'active'" . ($user['role'] === 'teacher' ? ' AND sub.teacher_id = ?' : '') . ' LIMIT 1');
     if ($user['role'] === 'teacher') {
@@ -84,7 +84,7 @@ if ($isTeacherView) {
                     <a href="scanner.php?subject_id=<?php echo $row['id']; ?>" class="text-decoration-none">
                         <div class="card rounded-4 p-3 h-100 border">
                             <h6 class="mb-1"><?php echo htmlspecialchars($row['name']); ?> (<?php echo htmlspecialchars($row['code']); ?>)</h6>
-                            <p class="text-muted mb-0"><?php echo htmlspecialchars($row['section_name']); ?> &middot; <?php echo htmlspecialchars($row['day_of_week']); ?> <?php echo formatTime($row['start_time']); ?></p>
+                            <p class="text-muted mb-0"><?php echo htmlspecialchars($row['room_name']); ?> &middot; <?php echo htmlspecialchars($row['day_of_week']); ?> <?php echo formatTime($row['start_time']); ?></p>
                         </div>
                     </a>
                 </div>
@@ -98,7 +98,7 @@ if ($isTeacherView) {
                     <p class="text-muted mb-2"><strong><?php echo htmlspecialchars($activeSubject['name']); ?></strong> &mdash; <?php echo htmlspecialchars($activeSubject['day_of_week']); ?> <?php echo formatTime($activeSubject['start_time']); ?><?php echo $activeSubject['end_time'] ? ' - ' . formatTime($activeSubject['end_time']) : ''; ?></p>
                     <div class="d-flex flex-wrap gap-2">
                         <span class="sp-shd-pill"><i class="fa-solid fa-graduation-cap"></i> <?php echo htmlspecialchars($activeSubject['course_code'] . ' - ' . $activeSubject['course_name']); ?></span>
-                        <span class="sp-shd-pill"><i class="fa-solid fa-user-group"></i> <?php echo htmlspecialchars($activeSubject['year_level'] . ' - ' . $activeSubject['section_name']); ?></span>
+                        <span class="sp-shd-pill"><i class="fa-solid fa-user-group"></i> <?php echo htmlspecialchars($activeSubject['year_level'] . ' - ' . $activeSubject['room_name']); ?></span>
                     </div>
                 </div>
             </div>
@@ -293,7 +293,7 @@ function showScanResult(data, statusLabel) {
                     <strong>${data.first_name} ${data.last_name}</strong> ${statusBadge}
                 </div>
                 <div class="text-muted small">ID: ${data.student_id}</div>
-                <div class="text-muted small">${data.course_code || 'N/A'} &middot; ${data.section_name || 'N/A'}</div>
+                <div class="text-muted small">${data.course_code || 'N/A'} &middot; ${data.room_name || 'N/A'}</div>
             </div>
             <div class="text-end small text-muted">
                 <i class="fa-solid fa-clock me-1"></i>${timeLabel}

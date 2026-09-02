@@ -2,7 +2,7 @@
 require_once __DIR__ . '/../includes/functions.php';
 requireRole(['teacher']);
 $pageTitle = 'Students';
-$pageSubtitle = 'Manage students in your assigned sections.';
+$pageSubtitle = 'Manage students in your assigned rooms.';
 
 $teacherId = currentTeacherId();
 if ($teacherId === false) {
@@ -10,30 +10,30 @@ if ($teacherId === false) {
     redirect('../dashboard.php');
 }
 
-$sectionStmt = $mysqli->prepare('SELECT DISTINCT sec.id, sec.section_name, sec.year_level FROM subjects sub JOIN sections sec ON sub.section_id = sec.id WHERE sub.teacher_id = ? ORDER BY sec.section_name');
-$sectionStmt->bind_param('i', $teacherId);
-$sectionStmt->execute();
-$sectionResult = $sectionStmt->get_result();
-$allowedSections = [];
-$sectionRows = [];
-while ($row = $sectionResult->fetch_assoc()) {
-    $allowedSections[] = (int) $row['id'];
-    $sectionRows[] = $row;
+$roomStmt = $mysqli->prepare('SELECT DISTINCT sec.id, sec.room_name, sec.year_level FROM subjects sub JOIN rooms sec ON sub.room_id = sec.id WHERE sub.teacher_id = ? ORDER BY sec.room_name');
+$roomStmt->bind_param('i', $teacherId);
+$roomStmt->execute();
+$roomResult = $roomStmt->get_result();
+$allowedRooms = [];
+$roomRows = [];
+while ($row = $roomResult->fetch_assoc()) {
+    $allowedRooms[] = (int) $row['id'];
+    $roomRows[] = $row;
 }
-$sectionStmt->close();
+$roomStmt->close();
 
 $filterSubjectId = intval($_GET['subject_id'] ?? 0);
 $filterSubjectName = null;
-$displaySections = [];
+$displayRooms = [];
 if ($filterSubjectId) {
-    $subjStmt = $mysqli->prepare('SELECT code, name, section_id FROM subjects WHERE id = ? AND teacher_id = ?');
+    $subjStmt = $mysqli->prepare('SELECT code, name, room_id FROM subjects WHERE id = ? AND teacher_id = ?');
     $subjStmt->bind_param('ii', $filterSubjectId, $teacherId);
     $subjStmt->execute();
     $subjRow = $subjStmt->get_result()->fetch_assoc();
     $subjStmt->close();
     if ($subjRow) {
         $filterSubjectName = $subjRow['code'] . ' - ' . $subjRow['name'];
-        $displaySections = [(int) $subjRow['section_id']];
+        $displayRooms = [(int) $subjRow['room_id']];
     }
 }
 
@@ -43,7 +43,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('students.php');
     }
     if ($_POST['action'] === 'save_student') {
-        $result = saveStudentRecord($mysqli, $_POST, $_FILES, $allowedSections);
+        $result = saveStudentRecord($mysqli, $_POST, $_FILES, $allowedRooms);
         if ($result['credentials']) {
             flashCredentials($result['credentials']['username'], $result['credentials']['password']);
         } else {
@@ -53,20 +53,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($_POST['action'] === 'delete_student' && !empty($_POST['student_id'])) {
         $sid = intval($_POST['student_id']);
-        if (deleteStudentRecord($mysqli, $sid, $allowedSections)) {
+        if (deleteStudentRecord($mysqli, $sid, $allowedRooms)) {
             flash('Student record deleted.', 'success');
         } else {
-            flash('You can only manage students in your own sections.', 'danger');
+            flash('You can only manage students in your own rooms.', 'danger');
         }
         redirect('students.php');
     }
     if ($_POST['action'] === 'create_student_credentials' && !empty($_POST['student_id'])) {
         $sid = intval($_POST['student_id']);
-        $stmt = $mysqli->prepare('SELECT student_id, user_id, email, section_id FROM students WHERE id = ?');
+        $stmt = $mysqli->prepare('SELECT student_id, user_id, email, room_id, first_name, last_name FROM students WHERE id = ?');
         $stmt->bind_param('i', $sid);
         $stmt->execute();
-        $stmt->bind_result($studentCode, $linkedUserId, $studentEmail, $studentSectionId);
-        if ($stmt->fetch() && in_array((int) $studentSectionId, $allowedSections)) {
+        $stmt->bind_result($studentCode, $linkedUserId, $studentEmail, $studentRoomId, $studentFirstName, $studentLastName);
+        if ($stmt->fetch() && in_array((int) $studentRoomId, $allowedRooms)) {
             $stmt->close();
             if ($linkedUserId) {
                 flash('A login already exists for this student. Password reset is disabled once a login is created.', 'danger');
@@ -78,6 +78,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $stmt2->bind_param('ii', $userId, $sid);
                     $stmt2->execute();
                     $stmt2->close();
+                    if ($studentEmail) {
+                        emailStudentCredentials($studentEmail, trim($studentFirstName . ' ' . $studentLastName), $studentCode, $plainPassword);
+                    }
                     flashCredentials($studentCode, $plainPassword);
                 } else {
                     flash('Unable to create a login account (email may already be in use).', 'danger');
@@ -85,7 +88,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         } else {
             $stmt->close();
-            flash('You can only manage students in your own sections.', 'danger');
+            flash('You can only manage students in your own rooms.', 'danger');
         }
         redirect('students.php');
     }
@@ -94,11 +97,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $newCredentials = flashCredentialsMessage();
 $courses = $mysqli->query('SELECT id, code, name FROM courses ORDER BY name');
 $studentRows = [];
-if ($displaySections) {
-    $placeholders = implode(',', array_fill(0, count($displaySections), '?'));
-    $types = str_repeat('i', count($displaySections));
-    $stmt = $mysqli->prepare("SELECT s.*, c.code AS course_code, sec.section_name FROM students s LEFT JOIN courses c ON s.course_id = c.id LEFT JOIN sections sec ON s.section_id = sec.id WHERE s.section_id IN ($placeholders) ORDER BY s.created_at DESC");
-    $stmt->bind_param($types, ...$displaySections);
+if ($displayRooms) {
+    $placeholders = implode(',', array_fill(0, count($displayRooms), '?'));
+    $types = str_repeat('i', count($displayRooms));
+    $stmt = $mysqli->prepare("SELECT s.*, c.code AS course_code, sec.room_name FROM students s LEFT JOIN courses c ON s.course_id = c.id LEFT JOIN rooms sec ON s.room_id = sec.id WHERE s.room_id IN ($placeholders) ORDER BY s.created_at DESC");
+    $stmt->bind_param($types, ...$displayRooms);
     $stmt->execute();
     $result = $stmt->get_result();
     while ($row = $result->fetch_assoc()) {
@@ -144,11 +147,11 @@ require_once __DIR__ . '/../includes/teacher_header.php';
                 <h5 class="mb-0"><?php echo htmlspecialchars($filterSubjectName); ?></h5>
             <?php endif; ?>
         </div>
-        <?php if ($allowedSections && $filterSubjectId): ?>
+        <?php if ($allowedRooms && $filterSubjectId): ?>
             <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#studentModal"><i class="fa-solid fa-plus me-1"></i> Add Student</button>
         <?php endif; ?>
     </div>
-    <?php if (!$allowedSections): ?>
+    <?php if (!$allowedRooms): ?>
         <div class="alert alert-info">You have no assigned subjects yet, so there are no students to manage. Ask an admin to assign you a subject.</div>
     <?php elseif (!$filterSubjectId): ?>
         <div class="alert alert-info">Open Students from a specific class in My Classes to see its roster.</div>
@@ -162,7 +165,7 @@ require_once __DIR__ . '/../includes/teacher_header.php';
                     <th>ID</th>
                     <th>Name</th>
                     <th>Course</th>
-                    <th>Section</th>
+                    <th>Room</th>
                     <th>Status</th>
                     <th>Actions</th>
                 </tr>
@@ -187,7 +190,7 @@ require_once __DIR__ . '/../includes/teacher_header.php';
                         <td><?php echo htmlspecialchars($row['student_id']); ?></td>
                         <td><?php echo htmlspecialchars($row['first_name'] . ' ' . $row['last_name']); ?></td>
                         <td><?php echo htmlspecialchars($row['course_code']); ?></td>
-                        <td><?php echo htmlspecialchars($row['section_name']); ?></td>
+                        <td><?php echo htmlspecialchars($row['room_name']); ?></td>
                         <td><?php echo badgeStatus($row['status']); ?></td>
                         <td>
                             <button class="btn btn-sm btn-outline-secondary btn-view" data-data='<?php echo json_encode($row); ?>' title="View"><i class="fa-solid fa-eye"></i></button>
@@ -253,8 +256,8 @@ require_once __DIR__ . '/../includes/teacher_header.php';
                 <div class="sp-profile-info-row">
                     <i class="fa-solid fa-graduation-cap"></i>
                     <div>
-                        <div class="sp-profile-info-label">Course / Section</div>
-                        <div class="sp-profile-info-value" id="viewStudentCourseSection"></div>
+                        <div class="sp-profile-info-label">Course / Room</div>
+                        <div class="sp-profile-info-value" id="viewStudentCourseRoom"></div>
                     </div>
                 </div>
                 <div class="sp-profile-info-row">
@@ -323,7 +326,7 @@ require_once __DIR__ . '/../includes/teacher_header.php';
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Email</label>
-                        <input type="email" class="form-control" name="email" id="emailField" readonly>
+                        <input type="email" class="form-control" name="email" id="emailField">
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Guardian / Contact Person</label>
@@ -347,10 +350,10 @@ require_once __DIR__ . '/../includes/teacher_header.php';
                         <input type="text" class="form-control" name="year_level" id="yearField">
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label">Section</label>
-                        <select class="form-select" name="section_id" id="sectionField">
-                            <?php foreach ($sectionRows as $section): ?>
-                                <option value="<?php echo $section['id']; ?>"><?php echo htmlspecialchars($section['year_level'] . ' - ' . $section['section_name']); ?></option>
+                        <label class="form-label">Room</label>
+                        <select class="form-select" name="room_id" id="roomField">
+                            <?php foreach ($roomRows as $room): ?>
+                                <option value="<?php echo $room['id']; ?>"><?php echo htmlspecialchars($room['year_level'] . ' - ' . $room['room_name']); ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
@@ -388,7 +391,7 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('guardianEmailField').value = data.guardian_email;
             document.getElementById('courseField').value = data.course_id;
             document.getElementById('yearField').value = data.year_level;
-            document.getElementById('sectionField').value = data.section_id;
+            document.getElementById('roomField').value = data.room_id;
             document.getElementById('statusField').value = data.status;
             studentModal.show();
         });
@@ -401,7 +404,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = JSON.parse(btn.getAttribute('data-data'));
             document.getElementById('viewStudentCode').textContent = data.student_id;
             document.getElementById('viewStudentName').textContent = (data.first_name + ' ' + data.last_name).trim();
-            document.getElementById('viewStudentCourseSection').textContent = (data.course_code || 'N/A') + ' — ' + (data.section_name || 'N/A');
+            document.getElementById('viewStudentCourseRoom').textContent = (data.course_code || 'N/A') + ' — ' + (data.room_name || 'N/A');
             document.getElementById('viewStudentPhone').textContent = data.phone || '—';
             document.getElementById('viewStudentEmail').textContent = data.email || '—';
             const statusBadge = data.status === 'active'

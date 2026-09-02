@@ -226,16 +226,25 @@ require_once __DIR__ . '/../includes/teacher_header.php';
                 <div class="modal-body">
                     <div class="mb-3">
                         <label class="form-label">Current Password</label>
-                        <input type="password" class="form-control" name="current_password" required>
+                        <div class="input-group">
+                            <input type="password" class="form-control" name="current_password" required>
+                            <button class="btn btn-outline-secondary js-toggle-password" type="button" tabindex="-1"><i class="fa-solid fa-eye"></i></button>
+                        </div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">New Password</label>
-                        <input type="password" class="form-control" name="new_password" minlength="8" required>
+                        <div class="input-group">
+                            <input type="password" class="form-control" name="new_password" minlength="8" required>
+                            <button class="btn btn-outline-secondary js-toggle-password" type="button" tabindex="-1"><i class="fa-solid fa-eye"></i></button>
+                        </div>
                         <div class="form-text">At least 8 characters.</div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Confirm New Password</label>
-                        <input type="password" class="form-control" name="confirm_password" minlength="8" required>
+                        <div class="input-group">
+                            <input type="password" class="form-control" name="confirm_password" minlength="8" required>
+                            <button class="btn btn-outline-secondary js-toggle-password" type="button" tabindex="-1"><i class="fa-solid fa-eye"></i></button>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer border-0">
@@ -257,6 +266,15 @@ require_once __DIR__ . '/../includes/teacher_header.php';
         editableInputs.forEach(function (el) { el.disabled = false; });
         actions.classList.remove('d-none');
         editBtn.classList.add('d-none');
+    });
+
+    document.querySelectorAll('.js-toggle-password').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var input = btn.previousElementSibling;
+            var isHidden = input.type === 'password';
+            input.type = isHidden ? 'text' : 'password';
+            btn.innerHTML = isHidden ? '<i class="fa-solid fa-eye-slash"></i>' : '<i class="fa-solid fa-eye"></i>';
+        });
     });
 
     cancelBtn.addEventListener('click', function () {

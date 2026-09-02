@@ -100,7 +100,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$stmt = $mysqli->prepare('SELECT s.*, c.code AS course_code, c.name AS course_name, sec.section_name FROM students s LEFT JOIN courses c ON s.course_id = c.id LEFT JOIN sections sec ON s.section_id = sec.id WHERE s.id = ? LIMIT 1');
+$stmt = $mysqli->prepare('SELECT s.*, c.code AS course_code, c.name AS course_name, sec.room_name FROM students s LEFT JOIN courses c ON s.course_id = c.id LEFT JOIN rooms sec ON s.room_id = sec.id WHERE s.id = ? LIMIT 1');
 $stmt->bind_param('i', $studentDbId);
 $stmt->execute();
 $student = $stmt->get_result()->fetch_assoc();
@@ -196,15 +196,15 @@ require_once __DIR__ . '/../includes/student_header.php';
                         <input type="email" class="form-control sp-profile-editable" name="email" value="<?php echo htmlspecialchars($student['email']); ?>" disabled>
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label small text-muted">Section</label>
-                        <input type="text" class="form-control" value="<?php echo htmlspecialchars($student['section_name'] ?: 'Not assigned'); ?>" disabled>
+                        <label class="form-label small text-muted">Room</label>
+                        <input type="text" class="form-control" value="<?php echo htmlspecialchars($student['room_name'] ?: 'Not assigned'); ?>" disabled>
                     </div>
                     <div class="col-md-6">
                         <label class="form-label small text-muted">Phone Number</label>
                         <input type="text" class="form-control sp-profile-editable" name="phone" value="<?php echo htmlspecialchars($student['phone']); ?>" disabled>
                     </div>
                 </div>
-                <p class="text-muted small mt-3 mb-0">Student ID, Course, Year Level, and Section are managed by the school. Contact an administrator to update them.</p>
+                <p class="text-muted small mt-3 mb-0">Student ID, Course, Year Level, and Room are managed by the school. Contact an administrator to update them.</p>
                 <div class="mt-3 d-none" id="profileFormActions">
                     <button type="submit" class="btn btn-primary rounded-pill">Save Changes</button>
                     <button type="button" class="btn btn-link" id="cancelEditBtn">Cancel</button>
@@ -239,16 +239,25 @@ require_once __DIR__ . '/../includes/student_header.php';
                 <div class="modal-body">
                     <div class="mb-3">
                         <label class="form-label">Current Password</label>
-                        <input type="password" class="form-control" name="current_password" required>
+                        <div class="input-group">
+                            <input type="password" class="form-control" name="current_password" required>
+                            <button class="btn btn-outline-secondary js-toggle-password" type="button" tabindex="-1"><i class="fa-solid fa-eye"></i></button>
+                        </div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">New Password</label>
-                        <input type="password" class="form-control" name="new_password" minlength="8" required>
+                        <div class="input-group">
+                            <input type="password" class="form-control" name="new_password" minlength="8" required>
+                            <button class="btn btn-outline-secondary js-toggle-password" type="button" tabindex="-1"><i class="fa-solid fa-eye"></i></button>
+                        </div>
                         <div class="form-text">At least 8 characters.</div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Confirm New Password</label>
-                        <input type="password" class="form-control" name="confirm_password" minlength="8" required>
+                        <div class="input-group">
+                            <input type="password" class="form-control" name="confirm_password" minlength="8" required>
+                            <button class="btn btn-outline-secondary js-toggle-password" type="button" tabindex="-1"><i class="fa-solid fa-eye"></i></button>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer border-0">
@@ -270,6 +279,15 @@ require_once __DIR__ . '/../includes/student_header.php';
         editableInputs.forEach(function (el) { el.disabled = false; });
         actions.classList.remove('d-none');
         editBtn.classList.add('d-none');
+    });
+
+    document.querySelectorAll('.js-toggle-password').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var input = btn.previousElementSibling;
+            var isHidden = input.type === 'password';
+            input.type = isHidden ? 'text' : 'password';
+            btn.innerHTML = isHidden ? '<i class="fa-solid fa-eye-slash"></i>' : '<i class="fa-solid fa-eye"></i>';
+        });
     });
 
     cancelBtn.addEventListener('click', function () {

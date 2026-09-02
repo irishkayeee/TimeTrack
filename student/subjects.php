@@ -22,7 +22,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'join_
         redirect('subjects.php');
     }
 
-    $classStmt = $mysqli->prepare('SELECT teacher_id, section_id, code, name FROM subjects WHERE join_code = ? LIMIT 1');
+    $classStmt = $mysqli->prepare('SELECT teacher_id, room_id, code, name FROM subjects WHERE join_code = ? LIMIT 1');
     $classStmt->bind_param('s', $classCode);
     $classStmt->execute();
     $targetClass = $classStmt->get_result()->fetch_assoc();
@@ -34,9 +34,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'join_
     }
 
     // A class is every subjects row (one per meeting day) sharing the same
-    // teacher + section + code, so enroll the student in all of them at once.
-    $rowsStmt = $mysqli->prepare('SELECT id FROM subjects WHERE teacher_id <=> ? AND section_id = ? AND code = ?');
-    $rowsStmt->bind_param('iis', $targetClass['teacher_id'], $targetClass['section_id'], $targetClass['code']);
+    // teacher + room + code, so enroll the student in all of them at once.
+    $rowsStmt = $mysqli->prepare('SELECT id FROM subjects WHERE teacher_id <=> ? AND room_id = ? AND code = ?');
+    $rowsStmt->bind_param('iis', $targetClass['teacher_id'], $targetClass['room_id'], $targetClass['code']);
     $rowsStmt->execute();
     $rowsResult = $rowsStmt->get_result();
     $classSubjectIds = [];
@@ -63,19 +63,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'join_
 }
 
 $me = currentUser();
-$stmt = $mysqli->prepare('SELECT first_name, last_name, section_id, student_id, qr_code FROM students WHERE id = ?');
+$stmt = $mysqli->prepare('SELECT first_name, last_name, room_id, student_id, qr_code FROM students WHERE id = ?');
 $stmt->bind_param('i', $studentDbId);
 $stmt->execute();
-$stmt->bind_result($myFirstName, $myLastName, $sectionId, $myStudentCode, $myQrCode);
+$stmt->bind_result($myFirstName, $myLastName, $roomId, $myStudentCode, $myQrCode);
 $stmt->fetch();
 $stmt->close();
 $myQrToken = $myQrCode ?: $myStudentCode;
 $myFullName = trim($myFirstName . ' ' . $myLastName);
 
 $myCourseYear = '';
-if ($sectionId) {
-    $courseStmt = $mysqli->prepare('SELECT c.code AS course_code, sec.year_level FROM sections sec JOIN courses c ON sec.course_id = c.id WHERE sec.id = ? LIMIT 1');
-    $courseStmt->bind_param('i', $sectionId);
+if ($roomId) {
+    $courseStmt = $mysqli->prepare('SELECT c.code AS course_code, sec.year_level FROM rooms sec JOIN courses c ON sec.course_id = c.id WHERE sec.id = ? LIMIT 1');
+    $courseStmt->bind_param('i', $roomId);
     $courseStmt->execute();
     $courseInfo = $courseStmt->get_result()->fetch_assoc();
     $courseStmt->close();
@@ -86,14 +86,14 @@ if ($sectionId) {
 
 $activeSubjects = [];
 $inactiveSubjects = [];
-$sectionIdParam = $sectionId ?: 0;
+$roomIdParam = $roomId ?: 0;
 $stmt = $mysqli->prepare("SELECT DISTINCT sub.*, CONCAT(t.first_name, ' ', t.last_name) AS teacher_name
     FROM subjects sub
     LEFT JOIN teachers t ON sub.teacher_id = t.id
     LEFT JOIN enrollments e ON e.subject_id = sub.id AND e.student_id = ?
-    WHERE sub.section_id = ? OR e.id IS NOT NULL
+    WHERE sub.room_id = ? OR e.id IS NOT NULL
     ORDER BY sub.name");
-$stmt->bind_param('ii', $studentDbId, $sectionIdParam);
+$stmt->bind_param('ii', $studentDbId, $roomIdParam);
 $stmt->execute();
 $result = $stmt->get_result();
 while ($row = $result->fetch_assoc()) {
@@ -199,10 +199,10 @@ require_once __DIR__ . '/../includes/student_header.php';
         </button>
     </div>
 </div>
-<?php if (!$sectionId && empty($activeSubjects) && empty($inactiveSubjects)): ?>
-    <div class="alert alert-info">You are not assigned to a section yet. Contact an administrator.</div>
+<?php if (!$roomId && empty($activeSubjects) && empty($inactiveSubjects)): ?>
+    <div class="alert alert-info">You are not assigned to a room yet. Contact an administrator.</div>
 <?php elseif (empty($activeSubjects) && empty($inactiveSubjects)): ?>
-    <div class="alert alert-info">No subjects scheduled for your section yet.</div>
+    <div class="alert alert-info">No subjects scheduled for your room yet.</div>
 <?php else: ?>
     <div class="row g-3">
         <?php foreach ($activeSubjects as $row) { renderSubjectCard($row, $myQrToken, $myFullName, $myCourseYear); } ?>

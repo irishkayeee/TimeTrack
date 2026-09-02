@@ -10,7 +10,7 @@ if ($studentDbId === false) {
     redirect('../dashboard.php');
 }
 
-$stmt = $mysqli->prepare('SELECT student_id, first_name, last_name, qr_code, course_id, section_id FROM students WHERE id = ?');
+$stmt = $mysqli->prepare('SELECT student_id, first_name, last_name, qr_code, course_id, room_id FROM students WHERE id = ?');
 $stmt->bind_param('i', $studentDbId);
 $stmt->execute();
 $student = $stmt->get_result()->fetch_assoc();

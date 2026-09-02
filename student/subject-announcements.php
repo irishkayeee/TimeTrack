@@ -8,7 +8,7 @@ if ($studentDbId === false) {
     redirect('../dashboard.php');
 }
 
-$stmt = $mysqli->prepare('SELECT section_id FROM students WHERE id = ?');
+$stmt = $mysqli->prepare('SELECT room_id FROM students WHERE id = ?');
 $stmt->bind_param('i', $studentDbId);
 $stmt->execute();
 $me = $stmt->get_result()->fetch_assoc();
@@ -21,7 +21,7 @@ $stmt->execute();
 $subject = $stmt->get_result()->fetch_assoc();
 $stmt->close();
 
-if (!$subject || (int) $subject['section_id'] !== (int) $me['section_id']) {
+if (!$subject || (int) $subject['room_id'] !== (int) $me['room_id']) {
     flash('Subject not found.', 'danger');
     redirect('subjects.php');
 }

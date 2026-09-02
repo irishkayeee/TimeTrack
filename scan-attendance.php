@@ -29,7 +29,7 @@ if (preg_match('/^(.+)\|SUBJ(\d+)$/', $qrValue, $matches)) {
         exit;
     }
 }
-$stmt = $mysqli->prepare("SELECT id, name, section_id, start_time, day_of_week, absent_cutoff_minutes FROM subjects WHERE id = ? AND status = 'active' LIMIT 1");
+$stmt = $mysqli->prepare("SELECT id, name, room_id, start_time, day_of_week, absent_cutoff_minutes FROM subjects WHERE id = ? AND status = 'active' LIMIT 1");
 $stmt->bind_param('i', $subjectId);
 $stmt->execute();
 $subject = $stmt->get_result()->fetch_assoc();
@@ -39,7 +39,7 @@ if (!$subject) {
     exit;
 }
 
-$stmt = $mysqli->prepare('SELECT s.id, s.first_name, s.last_name, s.student_id, s.course_id, s.section_id, s.photo, s.guardian_name, s.guardian_email, c.code AS course_code, sec.section_name FROM students s LEFT JOIN courses c ON s.course_id = c.id LEFT JOIN sections sec ON s.section_id = sec.id WHERE s.qr_code = ? OR s.student_id = ? LIMIT 1');
+$stmt = $mysqli->prepare('SELECT s.id, s.first_name, s.last_name, s.student_id, s.course_id, s.room_id, s.photo, s.guardian_name, s.guardian_email, c.code AS course_code, sec.room_name FROM students s LEFT JOIN courses c ON s.course_id = c.id LEFT JOIN rooms sec ON s.room_id = sec.id WHERE s.qr_code = ? OR s.student_id = ? LIMIT 1');
 $stmt->bind_param('ss', $qrValue, $qrValue);
 $stmt->execute();
 $result = $stmt->get_result();
@@ -50,8 +50,8 @@ if ($result->num_rows === 0) {
 $student = $result->fetch_assoc();
 $stmt->close();
 
-if (intval($student['section_id']) !== intval($subject['section_id'])) {
-    echo json_encode(['status' => 'error', 'message' => 'This student is not enrolled in this subject\'s section.']);
+if (intval($student['room_id']) !== intval($subject['room_id'])) {
+    echo json_encode(['status' => 'error', 'message' => 'This student is not enrolled in this subject\'s room.']);
     exit;
 }
 
@@ -69,8 +69,8 @@ if ($countToday > 0) {
 $scanTime = date('H:i:s');
 $status = computeAttendanceStatus($subject['start_time'], $scanTime, $subject['absent_cutoff_minutes']);
 
-$stmt = $mysqli->prepare('INSERT INTO attendance (student_id, course_id, section_id, subject_id, status, scan_type, date, time, created_at) VALUES (?, ?, ?, ?, ?, ?, CURDATE(), ?, NOW())');
-$stmt->bind_param('iiiisss', $student['id'], $student['course_id'], $student['section_id'], $subjectId, $status, $status, $scanTime);
+$stmt = $mysqli->prepare('INSERT INTO attendance (student_id, course_id, room_id, subject_id, status, scan_type, date, time, created_at) VALUES (?, ?, ?, ?, ?, ?, CURDATE(), ?, NOW())');
+$stmt->bind_param('iiiisss', $student['id'], $student['course_id'], $student['room_id'], $subjectId, $status, $status, $scanTime);
 $stmt->execute();
 $stmt->close();
 

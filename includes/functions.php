@@ -392,7 +392,7 @@ function generateTeacherClassNotifications($mysqli, $teacherId) {
     $now = time();
     $todayDate = date('Y-m-d');
 
-    $stmt = $mysqli->prepare("SELECT id, code, name, start_time, end_time, room FROM subjects WHERE teacher_id = ? AND day_of_week = ? AND status = 'active'");
+    $stmt = $mysqli->prepare("SELECT id, code, name, start_time, end_time, subject_room FROM subjects WHERE teacher_id = ? AND day_of_week = ? AND status = 'active'");
     $stmt->bind_param('is', $teacherId, $today);
     $stmt->execute();
     $subjects = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
@@ -403,7 +403,7 @@ function generateTeacherClassNotifications($mysqli, $teacherId) {
         $endTs = $subject['end_time'] ? strtotime($todayDate . ' ' . $subject['end_time']) : $startTs + 3600;
 
         if ($now >= $startTs - 900 && $now < $startTs && !teacherNotificationExistsToday($mysqli, $teacherId, $subject['id'], 'reminder')) {
-            $message = $subject['name'] . ' (' . $subject['code'] . ') starts at ' . date('g:i A', $startTs) . ($subject['room'] ? ' in ' . $subject['room'] : '') . '.';
+            $message = $subject['name'] . ' (' . $subject['code'] . ') starts at ' . date('g:i A', $startTs) . ($subject['subject_room'] ? ' in ' . $subject['subject_room'] : '') . '.';
             notifyTeacher($teacherId, 'reminder', 'Upcoming Class', $message, $subject['id']);
         }
 
@@ -472,10 +472,10 @@ function generateSecurePassword($length = 10) {
     return $password;
 }
 
-function ensureSectionJoinCode($mysqli, $sectionId) {
+function ensureRoomJoinCode($mysqli, $roomId) {
     $joinCode = null;
-    $stmt = $mysqli->prepare('SELECT join_code FROM sections WHERE id = ? LIMIT 1');
-    $stmt->bind_param('i', $sectionId);
+    $stmt = $mysqli->prepare('SELECT join_code FROM rooms WHERE id = ? LIMIT 1');
+    $stmt->bind_param('i', $roomId);
     $stmt->execute();
     $stmt->bind_result($joinCode);
     $stmt->fetch();
@@ -492,15 +492,15 @@ function ensureSectionJoinCode($mysqli, $sectionId) {
         for ($i = 0; $i < 6; $i++) {
             $candidate .= $alphabet[random_int(0, $max)];
         }
-        $check = $mysqli->prepare('SELECT id FROM sections WHERE join_code = ? LIMIT 1');
+        $check = $mysqli->prepare('SELECT id FROM rooms WHERE join_code = ? LIMIT 1');
         $check->bind_param('s', $candidate);
         $check->execute();
         $check->store_result();
         $isUnique = $check->num_rows === 0;
         $check->close();
         if ($isUnique) {
-            $update = $mysqli->prepare('UPDATE sections SET join_code = ? WHERE id = ?');
-            $update->bind_param('si', $candidate, $sectionId);
+            $update = $mysqli->prepare('UPDATE rooms SET join_code = ? WHERE id = ?');
+            $update->bind_param('si', $candidate, $roomId);
             $update->execute();
             $update->close();
             return $candidate;
@@ -509,12 +509,12 @@ function ensureSectionJoinCode($mysqli, $sectionId) {
     return null;
 }
 
-// A "class" is one or more subjects rows sharing the same teacher_id + section_id
-// + code (one row per meeting day). The join code is per-class, not per-section,
+// A "class" is one or more subjects rows sharing the same teacher_id + room_id
+// + code (one row per meeting day). The join code is per-class, not per-room,
 // so joining it only adds that one class to a student's list via `enrollments`
-// instead of swapping their whole section (and every subject in it).
+// instead of swapping their whole room (and every subject in it).
 function ensureClassJoinCode($mysqli, $subjectId) {
-    $refStmt = $mysqli->prepare('SELECT teacher_id, section_id, code, join_code FROM subjects WHERE id = ? LIMIT 1');
+    $refStmt = $mysqli->prepare('SELECT teacher_id, room_id, code, join_code FROM subjects WHERE id = ? LIMIT 1');
     $refStmt->bind_param('i', $subjectId);
     $refStmt->execute();
     $ref = $refStmt->get_result()->fetch_assoc();
@@ -528,8 +528,8 @@ function ensureClassJoinCode($mysqli, $subjectId) {
     }
 
     // A sibling day-row for the same class may already have a code.
-    $siblingStmt = $mysqli->prepare('SELECT join_code FROM subjects WHERE teacher_id <=> ? AND section_id = ? AND code = ? AND join_code IS NOT NULL LIMIT 1');
-    $siblingStmt->bind_param('iis', $ref['teacher_id'], $ref['section_id'], $ref['code']);
+    $siblingStmt = $mysqli->prepare('SELECT join_code FROM subjects WHERE teacher_id <=> ? AND room_id = ? AND code = ? AND join_code IS NOT NULL LIMIT 1');
+    $siblingStmt->bind_param('iis', $ref['teacher_id'], $ref['room_id'], $ref['code']);
     $siblingStmt->execute();
     $siblingStmt->bind_result($siblingCode);
     $hasSibling = $siblingStmt->fetch();
@@ -561,8 +561,8 @@ function ensureClassJoinCode($mysqli, $subjectId) {
         }
     }
 
-    $updateStmt = $mysqli->prepare('UPDATE subjects SET join_code = ? WHERE teacher_id <=> ? AND section_id = ? AND code = ?');
-    $updateStmt->bind_param('siis', $joinCode, $ref['teacher_id'], $ref['section_id'], $ref['code']);
+    $updateStmt = $mysqli->prepare('UPDATE subjects SET join_code = ? WHERE teacher_id <=> ? AND room_id = ? AND code = ?');
+    $updateStmt->bind_param('siis', $joinCode, $ref['teacher_id'], $ref['room_id'], $ref['code']);
     $updateStmt->execute();
     $updateStmt->close();
 
@@ -629,7 +629,7 @@ function virtualRosterStatus($startTime, $nowTime = null, $absentCutoff = null) 
 
 function getLiveRosterForSubject($mysqli, $subjectId) {
     $emptyCounts = ['present' => 0, 'late' => 0, 'absent' => 0, 'pending' => 0];
-    $stmt = $mysqli->prepare('SELECT id, teacher_id, section_id, start_time, day_of_week, absent_cutoff_minutes FROM subjects WHERE id = ? LIMIT 1');
+    $stmt = $mysqli->prepare('SELECT id, teacher_id, room_id, start_time, day_of_week, absent_cutoff_minutes FROM subjects WHERE id = ? LIMIT 1');
     $stmt->bind_param('i', $subjectId);
     $stmt->execute();
     $subject = $stmt->get_result()->fetch_assoc();
@@ -641,10 +641,10 @@ function getLiveRosterForSubject($mysqli, $subjectId) {
                      a.status AS scanned_status, a.time AS scan_time
               FROM students s
               LEFT JOIN attendance a ON a.student_id = s.id AND a.subject_id = ? AND a.date = CURDATE()
-              WHERE s.section_id = ? AND s.status = "active"
+              WHERE s.room_id = ? AND s.status = "active"
               ORDER BY s.last_name, s.first_name';
     $stmt = $mysqli->prepare($query);
-    $stmt->bind_param('ii', $subjectId, $subject['section_id']);
+    $stmt->bind_param('ii', $subjectId, $subject['room_id']);
     $stmt->execute();
     $result = $stmt->get_result();
     $rows = [];
@@ -700,7 +700,7 @@ function currentStudentId() {
     return $cached;
 }
 
-function saveStudentRecord($mysqli, $postData, $files, $allowedSectionIds = null) {
+function saveStudentRecord($mysqli, $postData, $files, $allowedRoomIds = null) {
     $id = intval($postData['id'] ?? 0);
     $studentId = sanitize($postData['student_id'] ?? '');
     $firstName = sanitize($postData['first_name'] ?? '');
@@ -709,33 +709,33 @@ function saveStudentRecord($mysqli, $postData, $files, $allowedSectionIds = null
     $birthday = sanitize($postData['birthday'] ?? '');
     $courseId = intval($postData['course_id'] ?? 0);
     $yearLevel = sanitize($postData['year_level'] ?? '');
-    $sectionId = intval($postData['section_id'] ?? 0);
+    $roomId = intval($postData['room_id'] ?? 0);
     $guardian = sanitize($postData['guardian'] ?? '');
     $guardianEmail = sanitize($postData['guardian_email'] ?? '');
     $phone = sanitize($postData['phone'] ?? '');
     $email = sanitize($postData['email'] ?? '');
     $status = sanitize($postData['status'] ?? 'active');
 
-    if ($allowedSectionIds !== null && !in_array($sectionId, $allowedSectionIds)) {
-        return ['success' => false, 'message' => 'You can only manage students in your own sections.', 'type' => 'danger', 'credentials' => null];
+    if ($allowedRoomIds !== null && !in_array($roomId, $allowedRoomIds)) {
+        return ['success' => false, 'message' => 'You can only manage students in your own rooms.', 'type' => 'danger', 'credentials' => null];
     }
-    if ($id && $allowedSectionIds !== null) {
-        $existingSectionId = null;
-        $check = $mysqli->prepare('SELECT section_id FROM students WHERE id = ?');
+    if ($id && $allowedRoomIds !== null) {
+        $existingRoomId = null;
+        $check = $mysqli->prepare('SELECT room_id FROM students WHERE id = ?');
         $check->bind_param('i', $id);
         $check->execute();
-        $check->bind_result($existingSectionId);
+        $check->bind_result($existingRoomId);
         $check->fetch();
         $check->close();
-        if (!in_array($existingSectionId, $allowedSectionIds)) {
-            return ['success' => false, 'message' => 'You can only manage students in your own sections.', 'type' => 'danger', 'credentials' => null];
+        if (!in_array($existingRoomId, $allowedRoomIds)) {
+            return ['success' => false, 'message' => 'You can only manage students in your own rooms.', 'type' => 'danger', 'credentials' => null];
         }
     }
     if (!$studentId) {
         $studentId = 'S' . time() . rand(10, 99);
     }
     $courseIdParam = $courseId ?: null;
-    $sectionIdParam = $sectionId ?: null;
+    $roomIdParam = $roomId ?: null;
     $birthdayParam = $birthday !== '' ? $birthday : null;
     $photo = '';
     if (!empty($files['photo']['name'])) {
@@ -748,20 +748,20 @@ function saveStudentRecord($mysqli, $postData, $files, $allowedSectionIds = null
     }
     if ($id) {
         $qrToken = $studentId;
-        $stmt = $mysqli->prepare('UPDATE students SET student_id = ?, first_name = ?, last_name = ?, gender = ?, birthday = ?, course_id = ?, year_level = ?, section_id = ?, guardian_name = ?, guardian_email = ?, phone = ?, email = ?, status = ?, qr_code = ?' . ($photo ? ', photo = ?' : '') . ' WHERE id = ?');
+        $stmt = $mysqli->prepare('UPDATE students SET student_id = ?, first_name = ?, last_name = ?, gender = ?, birthday = ?, course_id = ?, year_level = ?, room_id = ?, guardian_name = ?, guardian_email = ?, phone = ?, email = ?, status = ?, qr_code = ?' . ($photo ? ', photo = ?' : '') . ' WHERE id = ?');
         if ($photo) {
-            $stmt->bind_param('sssssisisssssssi', $studentId, $firstName, $lastName, $gender, $birthdayParam, $courseIdParam, $yearLevel, $sectionIdParam, $guardian, $guardianEmail, $phone, $email, $status, $qrToken, $photo, $id);
+            $stmt->bind_param('sssssisisssssssi', $studentId, $firstName, $lastName, $gender, $birthdayParam, $courseIdParam, $yearLevel, $roomIdParam, $guardian, $guardianEmail, $phone, $email, $status, $qrToken, $photo, $id);
         } else {
-            $stmt->bind_param('sssssisissssssi', $studentId, $firstName, $lastName, $gender, $birthdayParam, $courseIdParam, $yearLevel, $sectionIdParam, $guardian, $guardianEmail, $phone, $email, $status, $qrToken, $id);
+            $stmt->bind_param('sssssisissssssi', $studentId, $firstName, $lastName, $gender, $birthdayParam, $courseIdParam, $yearLevel, $roomIdParam, $guardian, $guardianEmail, $phone, $email, $status, $qrToken, $id);
         }
         $stmt->execute();
         $stmt->close();
         return ['success' => true, 'message' => 'Student updated successfully.', 'type' => 'success', 'credentials' => null];
     }
 
-    $stmt = $mysqli->prepare('INSERT INTO students (student_id, first_name, last_name, gender, birthday, course_id, year_level, section_id, guardian_name, guardian_email, phone, email, status, photo, qr_code, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())');
+    $stmt = $mysqli->prepare('INSERT INTO students (student_id, first_name, last_name, gender, birthday, course_id, year_level, room_id, guardian_name, guardian_email, phone, email, status, photo, qr_code, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())');
     $qrToken = $studentId;
-    $stmt->bind_param('sssssisisssssss', $studentId, $firstName, $lastName, $gender, $birthdayParam, $courseIdParam, $yearLevel, $sectionIdParam, $guardian, $guardianEmail, $phone, $email, $status, $photo, $qrToken);
+    $stmt->bind_param('sssssisisssssss', $studentId, $firstName, $lastName, $gender, $birthdayParam, $courseIdParam, $yearLevel, $roomIdParam, $guardian, $guardianEmail, $phone, $email, $status, $photo, $qrToken);
     $stmt->execute();
     $stmt->close();
     $newId = $mysqli->insert_id;
@@ -772,21 +772,39 @@ function saveStudentRecord($mysqli, $postData, $files, $allowedSectionIds = null
         $stmt->bind_param('ii', $userId, $newId);
         $stmt->execute();
         $stmt->close();
-        return ['success' => true, 'message' => 'Student added successfully.', 'type' => 'success', 'credentials' => ['username' => $studentId, 'password' => $plainPassword]];
+        $message = 'Student added successfully.';
+        if ($email && emailStudentCredentials($email, trim($firstName . ' ' . $lastName), $studentId, $plainPassword)) {
+            $message .= ' Login credentials were emailed to the student.';
+        }
+        return ['success' => true, 'message' => $message, 'type' => 'success', 'credentials' => ['username' => $studentId, 'password' => $plainPassword]];
     }
     return ['success' => true, 'message' => 'Student added, but a login account could not be created (email may already be in use).', 'type' => 'warning', 'credentials' => null];
 }
 
-function deleteStudentRecord($mysqli, $studentDbId, $allowedSectionIds = null) {
-    if ($allowedSectionIds !== null) {
-        $existingSectionId = null;
-        $check = $mysqli->prepare('SELECT section_id FROM students WHERE id = ?');
+function emailStudentCredentials($email, $studentName, $studentNumber, $plainPassword) {
+    if (!isMailConfigured()) {
+        return false;
+    }
+    $subject = 'Your TimeTrack Student Account';
+    $body = '<p>Hi ' . htmlspecialchars($studentName) . ',</p>'
+        . '<p>An account has been created for you on TimeTrack. Here are your login credentials:</p>'
+        . '<p><strong>Student Number:</strong> ' . htmlspecialchars($studentNumber) . '<br>'
+        . '<strong>Password:</strong> ' . htmlspecialchars($plainPassword) . '</p>'
+        . '<p>Please log in and change your password as soon as possible.</p>'
+        . '<p>— TimeTrack Attendance System</p>';
+    return sendMail($email, $studentName, $subject, $body);
+}
+
+function deleteStudentRecord($mysqli, $studentDbId, $allowedRoomIds = null) {
+    if ($allowedRoomIds !== null) {
+        $existingRoomId = null;
+        $check = $mysqli->prepare('SELECT room_id FROM students WHERE id = ?');
         $check->bind_param('i', $studentDbId);
         $check->execute();
-        $check->bind_result($existingSectionId);
+        $check->bind_result($existingRoomId);
         $found = $check->fetch();
         $check->close();
-        if (!$found || !in_array($existingSectionId, $allowedSectionIds)) {
+        if (!$found || !in_array($existingRoomId, $allowedRoomIds)) {
             return false;
         }
     }
@@ -820,12 +838,12 @@ function renderTeacherClassHeader($subject, $activeTab) {
                 <h4 class="mb-3"><?php echo htmlspecialchars($subject['code']); ?> — <?php echo htmlspecialchars($subject['name']); ?></h4>
                 <div class="sp-mc-meta mb-3" style="gap: 1.25rem;">
                     <span><i class="fa-solid fa-calendar"></i> <?php echo htmlspecialchars($subject['day_of_week']); ?> | <?php echo formatTime($subject['start_time']); ?><?php echo $subject['end_time'] ? ' - ' . formatTime($subject['end_time']) : ''; ?></span>
-                    <span><i class="fa-solid fa-location-dot"></i> <?php echo htmlspecialchars($subject['room'] ?: 'No room set'); ?></span>
+                    <span><i class="fa-solid fa-location-dot"></i> <?php echo htmlspecialchars($subject['subject_room'] ?: 'No room set'); ?></span>
                     <?php if ($subject['credit_units']): ?><span><i class="fa-solid fa-award"></i> <?php echo (int) $subject['credit_units']; ?> units</span><?php endif; ?>
                 </div>
                 <div class="d-flex flex-wrap gap-3">
                     <span class="sp-shd-pill"><i class="fa-solid fa-graduation-cap"></i> <?php echo htmlspecialchars($subject['course_code'] . ' - ' . $subject['course_name']); ?></span>
-                    <span class="sp-shd-pill"><i class="fa-solid fa-user-group"></i> <?php echo htmlspecialchars($subject['year_level'] . ' - ' . $subject['section_name']); ?></span>
+                    <span class="sp-shd-pill"><i class="fa-solid fa-user-group"></i> <?php echo htmlspecialchars($subject['year_level'] . ' - ' . $subject['room_name']); ?></span>
                 </div>
             </div>
             <span class="badge <?php echo $subject['status'] === 'active' ? 'sp-mc-badge sp-mc-badge-ongoing' : 'sp-mc-badge sp-mc-badge-inactive'; ?>" style="font-size: 0.95rem; padding: 0.5rem 1.1rem;"><?php echo $subject['status'] === 'active' ? 'Active' : 'Inactive'; ?></span>
@@ -859,8 +877,8 @@ function renderSubjectPageHeader($subject, $activeTab) {
             </div>
             <div class="sp-subject-header-badges">
                 <span class="sp-shd-pill"><i class="fa-solid fa-calendar-days"></i> <?php echo htmlspecialchars($subject['day_of_week']); ?> | <?php echo formatTime($subject['start_time']); ?><?php echo $subject['end_time'] ? ' - ' . formatTime($subject['end_time']) : ''; ?></span>
-                <?php if ($subject['room']): ?>
-                    <span class="sp-shd-pill"><i class="fa-solid fa-location-dot"></i> <?php echo htmlspecialchars($subject['room']); ?></span>
+                <?php if ($subject['subject_room']): ?>
+                    <span class="sp-shd-pill"><i class="fa-solid fa-location-dot"></i> <?php echo htmlspecialchars($subject['subject_room']); ?></span>
                 <?php endif; ?>
             </div>
         </div>

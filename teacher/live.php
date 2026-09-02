@@ -10,7 +10,7 @@ if ($teacherId === false) {
     redirect('../dashboard.php');
 }
 
-$stmt = $mysqli->prepare("SELECT sub.*, sec.section_name FROM subjects sub JOIN sections sec ON sub.section_id = sec.id WHERE sub.teacher_id = ? AND sub.status = 'active' ORDER BY sub.name");
+$stmt = $mysqli->prepare("SELECT sub.*, sec.room_name FROM subjects sub JOIN rooms sec ON sub.room_id = sec.id WHERE sub.teacher_id = ? AND sub.status = 'active' ORDER BY sub.name");
 $stmt->bind_param('i', $teacherId);
 $stmt->execute();
 $subjects = $stmt->get_result();
@@ -43,7 +43,7 @@ require_once __DIR__ . '/../includes/teacher_header.php';
                     <a href="live.php?subject_id=<?php echo $row['id']; ?>" class="text-decoration-none">
                         <div class="card rounded-4 p-3 h-100 border">
                             <h6 class="mb-1"><?php echo htmlspecialchars($row['name']); ?> (<?php echo htmlspecialchars($row['code']); ?>)</h6>
-                            <p class="text-muted mb-0"><?php echo htmlspecialchars($row['section_name']); ?> &middot; <?php echo htmlspecialchars($row['day_of_week']); ?> <?php echo formatTime($row['start_time']); ?></p>
+                            <p class="text-muted mb-0"><?php echo htmlspecialchars($row['room_name']); ?> &middot; <?php echo htmlspecialchars($row['day_of_week']); ?> <?php echo formatTime($row['start_time']); ?></p>
                         </div>
                     </a>
                 </div>

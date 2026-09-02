@@ -13,26 +13,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $code = sanitize($_POST['code'] ?? '');
         $name = sanitize($_POST['name'] ?? '');
         $teacherId = intval($_POST['teacher_id'] ?? 0);
-        $sectionId = intval($_POST['section_id'] ?? 0);
+        $roomId = intval($_POST['room_id'] ?? 0);
         $dayOfWeek = sanitize($_POST['day_of_week'] ?? 'Mon');
         $startTime = sanitize($_POST['start_time'] ?? '07:30');
         $endTime = sanitize($_POST['end_time'] ?? '');
         $endTimeParam = $endTime ?: null;
-        $room = sanitize($_POST['room'] ?? '');
+        $subjectRoom = sanitize($_POST['subject_room'] ?? '');
         $creditUnits = intval($_POST['credit_units'] ?? 0) ?: null;
         $importantNote = sanitize($_POST['important_note'] ?? '');
         $importantNoteParam = $importantNote ?: null;
         $status = sanitize($_POST['status'] ?? 'active');
         $teacherIdParam = $teacherId ?: null;
         if ($id) {
-            $stmt = $mysqli->prepare('UPDATE subjects SET code = ?, name = ?, teacher_id = ?, section_id = ?, day_of_week = ?, start_time = ?, end_time = ?, room = ?, credit_units = ?, important_note = ?, status = ? WHERE id = ?');
-            $stmt->bind_param('ssiissssissi', $code, $name, $teacherIdParam, $sectionId, $dayOfWeek, $startTime, $endTimeParam, $room, $creditUnits, $importantNoteParam, $status, $id);
+            $stmt = $mysqli->prepare('UPDATE subjects SET code = ?, name = ?, teacher_id = ?, room_id = ?, day_of_week = ?, start_time = ?, end_time = ?, subject_room = ?, credit_units = ?, important_note = ?, status = ? WHERE id = ?');
+            $stmt->bind_param('ssiissssissi', $code, $name, $teacherIdParam, $roomId, $dayOfWeek, $startTime, $endTimeParam, $subjectRoom, $creditUnits, $importantNoteParam, $status, $id);
             $stmt->execute();
             $stmt->close();
             flash('Subject updated.', 'success');
         } else {
-            $stmt = $mysqli->prepare('INSERT INTO subjects (code, name, teacher_id, section_id, day_of_week, start_time, end_time, room, credit_units, important_note, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())');
-            $stmt->bind_param('ssiissssiss', $code, $name, $teacherIdParam, $sectionId, $dayOfWeek, $startTime, $endTimeParam, $room, $creditUnits, $importantNoteParam, $status);
+            $stmt = $mysqli->prepare('INSERT INTO subjects (code, name, teacher_id, room_id, day_of_week, start_time, end_time, subject_room, credit_units, important_note, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())');
+            $stmt->bind_param('ssiissssiss', $code, $name, $teacherIdParam, $roomId, $dayOfWeek, $startTime, $endTimeParam, $subjectRoom, $creditUnits, $importantNoteParam, $status);
             $stmt->execute();
             $stmt->close();
             flash('Subject created.', 'success');
@@ -50,22 +50,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 $teachers = $mysqli->query("SELECT id, first_name, last_name FROM teachers WHERE status = 'active' ORDER BY first_name");
-$sections = $mysqli->query('SELECT id, section_name, year_level FROM sections ORDER BY section_name');
-$subjects = $mysqli->query('SELECT sub.*, CONCAT(t.first_name, " ", t.last_name) AS teacher_name, sec.section_name FROM subjects sub LEFT JOIN teachers t ON sub.teacher_id = t.id LEFT JOIN sections sec ON sub.section_id = sec.id ORDER BY sub.created_at DESC');
+$rooms = $mysqli->query('SELECT id, room_name, year_level FROM rooms ORDER BY room_name');
+$subjects = $mysqli->query('SELECT sub.*, CONCAT(t.first_name, " ", t.last_name) AS teacher_name, sec.room_name FROM subjects sub LEFT JOIN teachers t ON sub.teacher_id = t.id LEFT JOIN rooms sec ON sub.room_id = sec.id ORDER BY sub.created_at DESC');
 require_once __DIR__ . '/../includes/admin_header.php';
 ?>
 <div class="card rounded-4 shadow-sm p-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <div>
             <h4>Subject Management</h4>
-            <p class="text-muted mb-0">A subject is a class session: one weekly day/time slot, taught by a teacher to a section. A class held on multiple days needs one row per day.</p>
+            <p class="text-muted mb-0">A subject is a class session: one weekly day/time slot, taught by a teacher to a room. A class held on multiple days needs one row per day.</p>
         </div>
         <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#subjectModal">Add Subject</button>
     </div>
     <div class="table-responsive">
         <table class="table table-hover" id="subjectsTable">
             <thead class="table-light">
-                <tr><th>Code</th><th>Name</th><th>Teacher</th><th>Section</th><th>Day</th><th>Time</th><th>Room</th><th>Status</th><th>Actions</th></tr>
+                <tr><th>Code</th><th>Name</th><th>Teacher</th><th>Room</th><th>Day</th><th>Time</th><th>Subject Room</th><th>Status</th><th>Actions</th></tr>
             </thead>
             <tbody>
                 <?php while ($row = $subjects->fetch_assoc()): ?>
@@ -73,10 +73,10 @@ require_once __DIR__ . '/../includes/admin_header.php';
                         <td><?php echo htmlspecialchars($row['code']); ?></td>
                         <td><?php echo htmlspecialchars($row['name']); ?></td>
                         <td><?php echo htmlspecialchars($row['teacher_name'] ?: 'Unassigned'); ?></td>
-                        <td><?php echo htmlspecialchars($row['section_name']); ?></td>
+                        <td><?php echo htmlspecialchars($row['room_name']); ?></td>
                         <td><?php echo htmlspecialchars($row['day_of_week']); ?></td>
                         <td><?php echo formatTime($row['start_time']); ?><?php echo $row['end_time'] ? ' - ' . formatTime($row['end_time']) : ''; ?></td>
-                        <td><?php echo htmlspecialchars($row['room'] ?: '—'); ?></td>
+                        <td><?php echo htmlspecialchars($row['subject_room'] ?: '—'); ?></td>
                         <td><?php echo badgeStatus($row['status']); ?></td>
                         <td>
                             <button class="btn btn-sm btn-outline-primary btn-edit-subject" data-data='<?php echo json_encode($row); ?>'>Edit</button>
@@ -123,10 +123,10 @@ require_once __DIR__ . '/../includes/admin_header.php';
                         </select>
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label">Section</label>
-                        <select class="form-select" name="section_id" id="subjectSectionField" required>
-                            <?php while ($section = $sections->fetch_assoc()): ?>
-                                <option value="<?php echo $section['id']; ?>"><?php echo htmlspecialchars($section['year_level'] . ' - ' . $section['section_name']); ?></option>
+                        <label class="form-label">Room</label>
+                        <select class="form-select" name="room_id" id="subjectRoomField" required>
+                            <?php while ($room = $rooms->fetch_assoc()): ?>
+                                <option value="<?php echo $room['id']; ?>"><?php echo htmlspecialchars($room['year_level'] . ' - ' . $room['room_name']); ?></option>
                             <?php endwhile; ?>
                         </select>
                     </div>
@@ -147,8 +147,8 @@ require_once __DIR__ . '/../includes/admin_header.php';
                         <input type="time" class="form-control" name="end_time" id="subjectEndTimeField">
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label">Room</label>
-                        <input type="text" class="form-control" name="room" id="subjectRoomField" placeholder="e.g. IT Lab 1">
+                        <label class="form-label">Subject Room</label>
+                        <input type="text" class="form-control" name="subject_room" id="subjectRoomField" placeholder="e.g. IT Lab 1">
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Credit Units</label>
@@ -183,11 +183,11 @@ document.querySelectorAll('.btn-edit-subject').forEach(btn => {
         document.getElementById('subjectCodeField').value = data.code;
         document.getElementById('subjectNameField').value = data.name;
         document.getElementById('subjectTeacherField').value = data.teacher_id || '0';
-        document.getElementById('subjectSectionField').value = data.section_id;
+        document.getElementById('subjectRoomField').value = data.room_id;
         document.getElementById('subjectDayField').value = data.day_of_week;
         document.getElementById('subjectStartTimeField').value = data.start_time;
         document.getElementById('subjectEndTimeField').value = data.end_time || '';
-        document.getElementById('subjectRoomField').value = data.room || '';
+        document.getElementById('subjectRoomField').value = data.subject_room || '';
         document.getElementById('subjectCreditUnitsField').value = data.credit_units || '';
         document.getElementById('subjectNoteField').value = data.important_note || '';
         document.getElementById('subjectStatusField').value = data.status;

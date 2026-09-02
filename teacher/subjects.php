@@ -28,7 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             redirect('subjects.php');
         }
 
-        $refStmt = $mysqli->prepare('SELECT code, name, section_id, room, credit_units, status FROM subjects WHERE id = ? AND teacher_id = ? LIMIT 1');
+        $refStmt = $mysqli->prepare('SELECT code, name, room_id, subject_room, credit_units, status FROM subjects WHERE id = ? AND teacher_id = ? LIMIT 1');
         $refStmt->bind_param('ii', $id, $teacherId);
         $refStmt->execute();
         $ref = $refStmt->get_result()->fetch_assoc();
@@ -39,8 +39,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             redirect('subjects.php');
         }
 
-        $groupStmt = $mysqli->prepare('SELECT id, day_of_week FROM subjects WHERE teacher_id = ? AND section_id = ? AND code = ?');
-        $groupStmt->bind_param('iis', $teacherId, $ref['section_id'], $ref['code']);
+        $groupStmt = $mysqli->prepare('SELECT id, day_of_week FROM subjects WHERE teacher_id = ? AND room_id = ? AND code = ?');
+        $groupStmt->bind_param('iis', $teacherId, $ref['room_id'], $ref['code']);
         $groupStmt->execute();
         $existingByDay = [];
         $groupResult = $groupStmt->get_result();
@@ -57,8 +57,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $upd->execute();
                 $upd->close();
             } else {
-                $ins = $mysqli->prepare('INSERT INTO subjects (code, name, teacher_id, section_id, day_of_week, start_time, end_time, room, credit_units, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-                $ins->bind_param('ssiissssis', $ref['code'], $ref['name'], $teacherId, $ref['section_id'], $day, $startTime, $endTime, $ref['room'], $ref['credit_units'], $ref['status']);
+                $ins = $mysqli->prepare('INSERT INTO subjects (code, name, teacher_id, room_id, day_of_week, start_time, end_time, subject_room, credit_units, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+                $ins->bind_param('ssiissssis', $ref['code'], $ref['name'], $teacherId, $ref['room_id'], $day, $startTime, $endTime, $ref['subject_room'], $ref['credit_units'], $ref['status']);
                 $ins->execute();
                 $ins->close();
             }
@@ -81,7 +81,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $useDefault = isset($_POST['use_default']);
         $cutoff = $useDefault ? null : max(1, intval($_POST['absent_cutoff_minutes'] ?? 20));
 
-        $refStmt = $mysqli->prepare('SELECT code, section_id FROM subjects WHERE id = ? AND teacher_id = ? LIMIT 1');
+        $refStmt = $mysqli->prepare('SELECT code, room_id FROM subjects WHERE id = ? AND teacher_id = ? LIMIT 1');
         $refStmt->bind_param('ii', $id, $teacherId);
         $refStmt->execute();
         $ref = $refStmt->get_result()->fetch_assoc();
@@ -92,20 +92,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             redirect('subjects.php');
         }
 
-        $upd = $mysqli->prepare('UPDATE subjects SET absent_cutoff_minutes = ? WHERE teacher_id = ? AND section_id = ? AND code = ?');
-        $upd->bind_param('iiis', $cutoff, $teacherId, $ref['section_id'], $ref['code']);
+        $upd = $mysqli->prepare('UPDATE subjects SET absent_cutoff_minutes = ? WHERE teacher_id = ? AND room_id = ? AND code = ?');
+        $upd->bind_param('iiis', $cutoff, $teacherId, $ref['room_id'], $ref['code']);
         $upd->execute();
         $upd->close();
 
         flash('Attendance policy updated.', 'success');
         redirect('subjects.php');
     }
-    if ($_POST['action'] === 'save_room') {
+    if ($_POST['action'] === 'save_subject_room') {
         $id = intval($_POST['id'] ?? 0);
-        $room = trim(sanitize($_POST['room'] ?? ''));
-        $room = $room !== '' ? $room : null;
+        $subjectRoom = trim(sanitize($_POST['subject_room'] ?? ''));
+        $subjectRoom = $subjectRoom !== '' ? $subjectRoom : null;
 
-        $refStmt = $mysqli->prepare('SELECT code, section_id FROM subjects WHERE id = ? AND teacher_id = ? LIMIT 1');
+        $refStmt = $mysqli->prepare('SELECT code, room_id FROM subjects WHERE id = ? AND teacher_id = ? LIMIT 1');
         $refStmt->bind_param('ii', $id, $teacherId);
         $refStmt->execute();
         $ref = $refStmt->get_result()->fetch_assoc();
@@ -116,50 +116,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             redirect('subjects.php');
         }
 
-        $upd = $mysqli->prepare('UPDATE subjects SET room = ? WHERE teacher_id = ? AND section_id = ? AND code = ?');
-        $upd->bind_param('siis', $room, $teacherId, $ref['section_id'], $ref['code']);
+        $upd = $mysqli->prepare('UPDATE subjects SET subject_room = ? WHERE teacher_id = ? AND room_id = ? AND code = ?');
+        $upd->bind_param('siis', $subjectRoom, $teacherId, $ref['room_id'], $ref['code']);
         $upd->execute();
         $upd->close();
 
-        flash('Room updated.', 'success');
+        flash('Subject room updated.', 'success');
         redirect('subjects.php');
     }
     if ($_POST['action'] === 'create_class') {
         $code = trim(sanitize($_POST['code'] ?? ''));
         $name = trim(sanitize($_POST['name'] ?? ''));
-        $sectionId = intval($_POST['section_id'] ?? 0);
+        $roomId = intval($_POST['room_id'] ?? 0);
         $allowedDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
         $selectedDays = array_values(array_intersect($allowedDays, $_POST['day_of_week'] ?? []));
         $startTime = sanitize($_POST['start_time'] ?? '07:30');
         $endTime = sanitize($_POST['end_time'] ?? '');
         $endTimeParam = $endTime ?: null;
-        $room = trim(sanitize($_POST['room'] ?? ''));
-        $roomParam = $room !== '' ? $room : null;
+        $subjectRoom = trim(sanitize($_POST['subject_room'] ?? ''));
+        $subjectRoomParam = $subjectRoom !== '' ? $subjectRoom : null;
         $creditUnits = intval($_POST['credit_units'] ?? 0) ?: null;
         $importantNote = trim(sanitize($_POST['important_note'] ?? ''));
         $importantNoteParam = $importantNote !== '' ? $importantNote : null;
 
-        if ($code === '' || $name === '' || !$sectionId || empty($selectedDays)) {
-            flash('Please fill in the class code, name, section, and select at least one day.', 'danger');
+        if ($code === '' || $name === '' || !$roomId || empty($selectedDays)) {
+            flash('Please fill in the class code, name, room, and select at least one day.', 'danger');
             redirect('subjects.php');
         }
 
-        $sectionCheck = $mysqli->prepare('SELECT id FROM sections WHERE id = ? LIMIT 1');
-        $sectionCheck->bind_param('i', $sectionId);
-        $sectionCheck->execute();
-        $sectionCheck->store_result();
-        $validSection = $sectionCheck->num_rows > 0;
-        $sectionCheck->close();
+        $roomCheck = $mysqli->prepare('SELECT id FROM rooms WHERE id = ? LIMIT 1');
+        $roomCheck->bind_param('i', $roomId);
+        $roomCheck->execute();
+        $roomCheck->store_result();
+        $validRoom = $roomCheck->num_rows > 0;
+        $roomCheck->close();
 
-        if (!$validSection) {
-            flash('Please select a valid section.', 'danger');
+        if (!$validRoom) {
+            flash('Please select a valid room.', 'danger');
             redirect('subjects.php');
         }
 
         $newSubjectId = null;
         foreach ($selectedDays as $day) {
-            $ins = $mysqli->prepare('INSERT INTO subjects (code, name, teacher_id, section_id, day_of_week, start_time, end_time, room, credit_units, important_note, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "active", NOW())');
-            $ins->bind_param('ssiissssis', $code, $name, $teacherId, $sectionId, $day, $startTime, $endTimeParam, $roomParam, $creditUnits, $importantNoteParam);
+            $ins = $mysqli->prepare('INSERT INTO subjects (code, name, teacher_id, room_id, day_of_week, start_time, end_time, subject_room, credit_units, important_note, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "active", NOW())');
+            $ins->bind_param('ssiissssis', $code, $name, $teacherId, $roomId, $day, $startTime, $endTimeParam, $subjectRoomParam, $creditUnits, $importantNoteParam);
             $ins->execute();
             $newSubjectId = $mysqli->insert_id;
             $ins->close();
@@ -173,15 +173,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $statusFilter = sanitize($_GET['status'] ?? 'active');
 $courseFilter = intval($_GET['course_id'] ?? 0);
-$sectionFilter = intval($_GET['section_id'] ?? 0);
+$roomFilter = intval($_GET['room_id'] ?? 0);
 
-// Program (course) and Block (section) options, scoped to this teacher's own classes only.
-$filterOptionsStmt = $mysqli->prepare('SELECT DISTINCT c.id AS course_id, c.code AS course_code, c.name AS course_name, sec.id AS section_id, sec.section_name, sec.year_level
+// Program (course) and Block (room) options, scoped to this teacher's own classes only.
+$filterOptionsStmt = $mysqli->prepare('SELECT DISTINCT c.id AS course_id, c.code AS course_code, c.name AS course_name, sec.id AS room_id, sec.room_name, sec.year_level
     FROM subjects sub
-    JOIN sections sec ON sub.section_id = sec.id
+    JOIN rooms sec ON sub.room_id = sec.id
     JOIN courses c ON sec.course_id = c.id
     WHERE sub.teacher_id = ?
-    ORDER BY c.code, sec.year_level, sec.section_name');
+    ORDER BY c.code, sec.year_level, sec.room_name');
 $filterOptionsStmt->bind_param('i', $teacherId);
 $filterOptionsStmt->execute();
 $filterOptionsResult = $filterOptionsStmt->get_result();
@@ -189,13 +189,13 @@ $programOptions = [];
 $blockOptions = [];
 while ($opt = $filterOptionsResult->fetch_assoc()) {
     $programOptions[(int) $opt['course_id']] = $opt['course_code'] . ' - ' . $opt['course_name'];
-    $blockOptions[(int) $opt['section_id']] = $opt['year_level'] . ' - ' . $opt['section_name'];
+    $blockOptions[(int) $opt['room_id']] = $opt['year_level'] . ' - ' . $opt['room_name'];
 }
 $filterOptionsStmt->close();
 
-$query = 'SELECT sub.*, sec.section_name, sec.year_level, c.id AS course_id, c.code AS course_code
+$query = 'SELECT sub.*, sec.room_name, sec.year_level, c.id AS course_id, c.code AS course_code
     FROM subjects sub
-    JOIN sections sec ON sub.section_id = sec.id
+    JOIN rooms sec ON sub.room_id = sec.id
     JOIN courses c ON sec.course_id = c.id
     WHERE sub.teacher_id = ?';
 $types = 'i';
@@ -210,10 +210,10 @@ if ($courseFilter) {
     $types .= 'i';
     $params[] = $courseFilter;
 }
-if ($sectionFilter) {
+if ($roomFilter) {
     $query .= ' AND sec.id = ?';
     $types .= 'i';
-    $params[] = $sectionFilter;
+    $params[] = $roomFilter;
 }
 $query .= ' ORDER BY sub.day_of_week, sub.start_time';
 $stmt = $mysqli->prepare($query);
@@ -226,15 +226,15 @@ while ($row = $subjectsResult->fetch_assoc()) {
 }
 $stmt->close();
 
-// Map of "sectionId|code" => [days already scheduled], so the Edit Schedule
+// Map of "roomId|code" => [days already scheduled], so the Edit Schedule
 // modal can pre-check every day this class meets on, not just this one row.
-$groupDaysStmt = $mysqli->prepare('SELECT section_id, code, day_of_week FROM subjects WHERE teacher_id = ?');
+$groupDaysStmt = $mysqli->prepare('SELECT room_id, code, day_of_week FROM subjects WHERE teacher_id = ?');
 $groupDaysStmt->bind_param('i', $teacherId);
 $groupDaysStmt->execute();
 $groupDaysResult = $groupDaysStmt->get_result();
 $groupDaysMap = [];
 while ($row = $groupDaysResult->fetch_assoc()) {
-    $key = $row['section_id'] . '|' . $row['code'];
+    $key = $row['room_id'] . '|' . $row['code'];
     $groupDaysMap[$key][] = $row['day_of_week'];
 }
 $groupDaysStmt->close();
@@ -248,18 +248,18 @@ $todayCount = 0;
 $totalStudentsAllTime = 0;
 $attendanceRateSum = 0;
 $attendanceRateCount = 0;
-$uniqueSectionIds = [];
+$uniqueRoomIds = [];
 
 foreach ($subjectRows as &$row) {
-    $groupKey = $row['section_id'] . '|' . $row['code'];
+    $groupKey = $row['room_id'] . '|' . $row['code'];
     $row['group_days'] = $groupDaysMap[$groupKey] ?? [$row['day_of_week']];
 
     $roster = getLiveRosterForSubject($mysqli, $row['id']);
     $row['roster'] = $roster;
     $row['enrolled'] = count($roster['rows']);
 
-    if (!in_array((int) $row['section_id'], $uniqueSectionIds, true)) {
-        $uniqueSectionIds[] = (int) $row['section_id'];
+    if (!in_array((int) $row['room_id'], $uniqueRoomIds, true)) {
+        $uniqueRoomIds[] = (int) $row['room_id'];
         $totalStudentsAllTime += $row['enrolled'];
     }
 
@@ -282,13 +282,13 @@ unset($row);
 
 $averageAttendance = $attendanceRateCount ? round($attendanceRateSum / $attendanceRateCount, 1) : 0;
 
-// Consolidate same class+section rows (one per meeting day) into a single card,
+// Consolidate same class+room rows (one per meeting day) into a single card,
 // listing every day it meets and using today's day (or the earliest one) for
 // the card's action links.
 $dayOrder = ['Mon' => 1, 'Tue' => 2, 'Wed' => 3, 'Thu' => 4, 'Fri' => 5, 'Sat' => 6, 'Sun' => 7];
 $cardGroups = [];
 foreach ($subjectRows as $row) {
-    $groupKey = $row['section_id'] . '|' . $row['code'];
+    $groupKey = $row['room_id'] . '|' . $row['code'];
     if (!isset($cardGroups[$groupKey])) {
         $cardGroups[$groupKey] = $row;
         $cardGroups[$groupKey]['days'] = [];
@@ -306,8 +306,8 @@ foreach ($cardGroups as &$group) {
 }
 unset($group);
 
-$allSectionsStmt = $mysqli->query('SELECT sec.id, sec.section_name, sec.year_level, c.code AS course_code FROM sections sec LEFT JOIN courses c ON sec.course_id = c.id ORDER BY sec.year_level, sec.section_name');
-$allSections = $allSectionsStmt->fetch_all(MYSQLI_ASSOC);
+$allRoomsStmt = $mysqli->query('SELECT sec.id, sec.room_name, sec.year_level, c.code AS course_code FROM rooms sec LEFT JOIN courses c ON sec.course_id = c.id ORDER BY sec.year_level, sec.room_name');
+$allRooms = $allRoomsStmt->fetch_all(MYSQLI_ASSOC);
 
 require_once __DIR__ . '/../includes/teacher_header.php';
 ?>
@@ -365,10 +365,10 @@ require_once __DIR__ . '/../includes/teacher_header.php';
                     <option value="<?php echo $optId; ?>" <?php echo $courseFilter === $optId ? 'selected' : ''; ?>><?php echo htmlspecialchars($optLabel); ?></option>
                 <?php endforeach; ?>
             </select>
-            <select class="form-select form-select-sm sp-filter-select" name="section_id" onchange="this.form.submit()" style="width:auto;" title="Filter by block">
+            <select class="form-select form-select-sm sp-filter-select" name="room_id" onchange="this.form.submit()" style="width:auto;" title="Filter by block">
                 <option value="0">All Blocks</option>
                 <?php foreach ($blockOptions as $optId => $optLabel): ?>
-                    <option value="<?php echo $optId; ?>" <?php echo $sectionFilter === $optId ? 'selected' : ''; ?>><?php echo htmlspecialchars($optLabel); ?></option>
+                    <option value="<?php echo $optId; ?>" <?php echo $roomFilter === $optId ? 'selected' : ''; ?>><?php echo htmlspecialchars($optLabel); ?></option>
                 <?php endforeach; ?>
             </select>
             <select class="form-select form-select-sm sp-filter-select" name="status" onchange="this.form.submit()" style="width:auto;">
@@ -399,7 +399,7 @@ require_once __DIR__ . '/../includes/teacher_header.php';
                     <div class="sp-subject-body">
                         <div class="sp-subject-teacher">
                             <div class="sp-subject-meta">
-                                <span class="sp-subject-prof"><?php echo htmlspecialchars($group['section_name']); ?></span>
+                                <span class="sp-subject-prof"><?php echo htmlspecialchars($group['room_name']); ?></span>
                                 <?php echo htmlspecialchars(implode(', ', $group['days'])); ?> | <?php echo formatTime($group['start_time']); ?><?php echo $group['end_time'] ? ' - ' . formatTime($group['end_time']) : ''; ?>
                                 <br><span class="text-muted">Join Code: <strong><?php echo htmlspecialchars($group['join_code'] ?: '—'); ?></strong></span>
                             </div>
@@ -408,7 +408,7 @@ require_once __DIR__ . '/../includes/teacher_header.php';
                                 <ul class="dropdown-menu dropdown-menu-end">
                                     <li><button class="dropdown-item btn-edit-schedule" type="button" data-data='<?php echo json_encode($group); ?>'>Edit Schedule</button></li>
                                     <li><button class="dropdown-item btn-edit-policy" type="button" data-data='<?php echo json_encode($group); ?>'>Edit Attendance Policy</button></li>
-                                    <li><button class="dropdown-item btn-edit-room" type="button" data-data='<?php echo json_encode($group); ?>'>Edit Room</button></li>
+                                    <li><button class="dropdown-item btn-edit-subject-room" type="button" data-data='<?php echo json_encode($group); ?>'>Edit Subject Room</button></li>
                                 </ul>
                             </div>
                         </div>
@@ -494,25 +494,25 @@ require_once __DIR__ . '/../includes/teacher_header.php';
     </div>
 </div>
 
-<div class="modal fade" id="roomModal" tabindex="-1" aria-hidden="true">
+<div class="modal fade" id="subjectRoomModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content rounded-4">
             <div class="modal-header">
-                <h5 class="modal-title" id="roomModalTitle">Edit Room</h5>
+                <h5 class="modal-title" id="subjectRoomModalTitle">Edit Subject Room</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <form method="post">
                 <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
-                <input type="hidden" name="action" value="save_room">
-                <input type="hidden" name="id" id="roomIdField">
+                <input type="hidden" name="action" value="save_subject_room">
+                <input type="hidden" name="id" id="subjectRoomIdField">
                 <div class="modal-body">
                     <p class="text-muted small">This also updates where students see this class's room.</p>
-                    <label class="form-label">Room</label>
-                    <input type="text" class="form-control" name="room" id="roomField" placeholder="e.g. IT Lab 5">
+                    <label class="form-label">Subject Room</label>
+                    <input type="text" class="form-control" name="subject_room" id="subjectRoomField" placeholder="e.g. IT Lab 5">
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Save Room</button>
+                    <button type="submit" class="btn btn-primary">Save Subject Room</button>
                 </div>
             </form>
         </div>
@@ -530,7 +530,7 @@ require_once __DIR__ . '/../includes/teacher_header.php';
                 <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
                 <input type="hidden" name="action" value="create_class">
                 <div class="modal-body row g-3">
-                    <p class="text-muted small mb-0">Create a class for a section you're teaching. A join code will be generated so you can share it with your students.</p>
+                    <p class="text-muted small mb-0">Create a class for a room you're teaching. A join code will be generated so you can share it with your students.</p>
                     <div class="col-md-6">
                         <label class="form-label">Class Code</label>
                         <input type="text" class="form-control" name="code" placeholder="e.g. IT 205" required>
@@ -540,17 +540,17 @@ require_once __DIR__ . '/../includes/teacher_header.php';
                         <input type="text" class="form-control" name="name" placeholder="e.g. Web Development" required>
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label">Section</label>
-                        <select class="form-select" name="section_id" required>
-                            <option value="">Select a section</option>
-                            <?php foreach ($allSections as $section): ?>
-                                <option value="<?php echo $section['id']; ?>"><?php echo htmlspecialchars(($section['course_code'] ? $section['course_code'] . ' - ' : '') . $section['year_level'] . ' - ' . $section['section_name']); ?></option>
+                        <label class="form-label">Room</label>
+                        <select class="form-select" name="room_id" required>
+                            <option value="">Select a room</option>
+                            <?php foreach ($allRooms as $room): ?>
+                                <option value="<?php echo $room['id']; ?>"><?php echo htmlspecialchars(($room['course_code'] ? $room['course_code'] . ' - ' : '') . $room['year_level'] . ' - ' . $room['room_name']); ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label">Room</label>
-                        <input type="text" class="form-control" name="room" placeholder="e.g. IT Lab 5">
+                        <label class="form-label">Subject Room</label>
+                        <input type="text" class="form-control" name="subject_room" placeholder="e.g. IT Lab 5">
                     </div>
                     <div class="col-12">
                         <label class="form-label">Days of Week</label>
@@ -625,14 +625,14 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 
-    const roomModal = new bootstrap.Modal(document.getElementById('roomModal'));
-    document.querySelectorAll('.btn-edit-room').forEach(btn => {
+    const subjectRoomModal = new bootstrap.Modal(document.getElementById('subjectRoomModal'));
+    document.querySelectorAll('.btn-edit-subject-room').forEach(btn => {
         btn.addEventListener('click', () => {
             const data = JSON.parse(btn.getAttribute('data-data'));
-            document.getElementById('roomModalTitle').textContent = 'Edit Room — ' + data.name;
-            document.getElementById('roomIdField').value = data.id;
-            document.getElementById('roomField').value = data.room || '';
-            roomModal.show();
+            document.getElementById('subjectRoomModalTitle').textContent = 'Edit Subject Room — ' + data.name;
+            document.getElementById('subjectRoomIdField').value = data.id;
+            document.getElementById('subjectRoomField').value = data.subject_room || '';
+            subjectRoomModal.show();
         });
     });
 

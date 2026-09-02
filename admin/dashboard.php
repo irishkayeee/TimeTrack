@@ -12,13 +12,13 @@ $schoolYear = getSetting('school_year', date('Y') . '-' . (date('Y') + 1));
 $studentsCount = $mysqli->query('SELECT COUNT(*) FROM students')->fetch_row()[0];
 $teachersCount = $mysqli->query('SELECT COUNT(*) FROM teachers')->fetch_row()[0];
 $coursesCount = $mysqli->query('SELECT COUNT(*) FROM courses')->fetch_row()[0];
-$sectionsCount = $mysqli->query('SELECT COUNT(*) FROM sections')->fetch_row()[0];
+$roomsCount = $mysqli->query('SELECT COUNT(*) FROM rooms')->fetch_row()[0];
 $attendanceToday = $mysqli->query("SELECT COUNT(*) FROM attendance WHERE date = CURDATE()")->fetch_row()[0];
 
-$studentsList = $mysqli->query('SELECT s.student_id, s.first_name, s.last_name, c.code AS course_code, sec.section_name FROM students s LEFT JOIN courses c ON s.course_id = c.id LEFT JOIN sections sec ON s.section_id = sec.id ORDER BY s.first_name');
+$studentsList = $mysqli->query('SELECT s.student_id, s.first_name, s.last_name, c.code AS course_code, sec.room_name FROM students s LEFT JOIN courses c ON s.course_id = c.id LEFT JOIN rooms sec ON s.room_id = sec.id ORDER BY s.first_name');
 $teachersList = $mysqli->query('SELECT teacher_id, first_name, last_name, subject FROM teachers ORDER BY first_name');
 $coursesListDash = $mysqli->query('SELECT code, name FROM courses ORDER BY code');
-$sectionsListDash = $mysqli->query('SELECT year_level, section_name FROM sections ORDER BY year_level, section_name');
+$roomsListDash = $mysqli->query('SELECT year_level, room_name FROM rooms ORDER BY year_level, room_name');
 $attendanceTodayList = $mysqli->query("SELECT a.status, a.time, s.first_name, s.last_name FROM attendance a LEFT JOIN students s ON a.student_id = s.id WHERE a.date = CURDATE() ORDER BY a.time DESC");
 
 // ---- Analytics ----
@@ -38,13 +38,13 @@ while ($row = $trendResult->fetch_assoc()) {
     $trendData[] = $row['total'] ? round($row['attended'] / $row['total'] * 100) : 0;
 }
 
-$sectionLabels = [];
-$sectionData = [];
-$sectionRateSql = "SELECT sec.section_name, sec.year_level, SUM(a.status IN ('present','late')) AS attended, COUNT(a.id) AS total FROM attendance a JOIN sections sec ON a.section_id = sec.id" . ($courseFilterId ? " WHERE a.course_id = $courseFilterId" : '') . ' GROUP BY sec.id ORDER BY sec.section_name';
-$sectionRateResult = $mysqli->query($sectionRateSql);
-while ($row = $sectionRateResult->fetch_assoc()) {
-    $sectionLabels[] = $row['section_name'];
-    $sectionData[] = $row['total'] ? round($row['attended'] / $row['total'] * 100) : 0;
+$roomLabels = [];
+$roomData = [];
+$roomRateSql = "SELECT sec.room_name, sec.year_level, SUM(a.status IN ('present','late')) AS attended, COUNT(a.id) AS total FROM attendance a JOIN rooms sec ON a.room_id = sec.id" . ($courseFilterId ? " WHERE a.course_id = $courseFilterId" : '') . ' GROUP BY sec.id ORDER BY sec.room_name';
+$roomRateResult = $mysqli->query($roomRateSql);
+while ($row = $roomRateResult->fetch_assoc()) {
+    $roomLabels[] = $row['room_name'];
+    $roomData[] = $row['total'] ? round($row['attended'] / $row['total'] * 100) : 0;
 }
 
 $courseLabels = [];
@@ -92,7 +92,7 @@ while ($row = $enrollResult->fetch_assoc()) {
     $enrollData[] = (int) $row['cnt'];
 }
 
-$atRiskSql = "SELECT s.id, s.first_name, s.last_name, s.student_id, c.code AS course_code, sec.section_name, SUM(a.status = 'absent') AS absents, SUM(a.status = 'late') AS lates, COUNT(a.id) AS total FROM attendance a JOIN students s ON a.student_id = s.id LEFT JOIN courses c ON s.course_id = c.id LEFT JOIN sections sec ON s.section_id = sec.id" . ($courseFilterId ? " WHERE a.course_id = $courseFilterId" : '') . " GROUP BY s.id HAVING (SUM(a.status = 'absent') + SUM(a.status = 'late')) > 0 ORDER BY (SUM(a.status = 'absent') * 2 + SUM(a.status = 'late')) DESC LIMIT 10";
+$atRiskSql = "SELECT s.id, s.first_name, s.last_name, s.student_id, c.code AS course_code, sec.room_name, SUM(a.status = 'absent') AS absents, SUM(a.status = 'late') AS lates, COUNT(a.id) AS total FROM attendance a JOIN students s ON a.student_id = s.id LEFT JOIN courses c ON s.course_id = c.id LEFT JOIN rooms sec ON s.room_id = sec.id" . ($courseFilterId ? " WHERE a.course_id = $courseFilterId" : '') . " GROUP BY s.id HAVING (SUM(a.status = 'absent') + SUM(a.status = 'late')) > 0 ORDER BY (SUM(a.status = 'absent') * 2 + SUM(a.status = 'late')) DESC LIMIT 10";
 $atRiskResult = $mysqli->query($atRiskSql);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'export_at_risk_pdf') {
@@ -102,9 +102,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'expor
     }
     $rows = [];
     while ($row = $atRiskResult->fetch_assoc()) {
-        $rows[] = [$row['student_id'], $row['first_name'] . ' ' . $row['last_name'], trim(($row['course_code'] ?: '') . ' ' . ($row['section_name'] ?: '')), (int) $row['absents'], (int) $row['lates']];
+        $rows[] = [$row['student_id'], $row['first_name'] . ' ' . $row['last_name'], trim(($row['course_code'] ?: '') . ' ' . ($row['room_name'] ?: '')), (int) $row['absents'], (int) $row['lates']];
     }
-    $pdf = generateSimpleTablePdf('At-Risk Students', ['ID', 'Name', 'Course/Section', 'Absent', 'Late'], $rows, [80, 200, 160, 70, 70]);
+    $pdf = generateSimpleTablePdf('At-Risk Students', ['ID', 'Name', 'Course/Room', 'Absent', 'Late'], $rows, [80, 200, 160, 70, 70]);
     header('Content-Type: application/pdf');
     header('Content-Disposition: attachment; filename="at_risk_students_' . date('Ymd') . '.pdf"');
     header('Content-Length: ' . strlen($pdf));
@@ -176,12 +176,12 @@ require_once __DIR__ . '/../includes/admin_header.php';
         </div>
     </div>
     <div class="col-6 col-lg">
-        <div class="card p-3 text-center stat-card-clickable" data-bs-toggle="modal" data-bs-target="#sectionsListModal">
+        <div class="card p-3 text-center stat-card-clickable" data-bs-toggle="modal" data-bs-target="#roomsListModal">
             <div class="d-flex align-items-center justify-content-center gap-2 mb-2">
                 <span class="stat-icon"><i class="fa-solid fa-people-group"></i></span>
-                <h6 class="text-muted small text-uppercase mb-0">Sections</h6>
+                <h6 class="text-muted small text-uppercase mb-0">Rooms</h6>
             </div>
-            <h2 class="mb-0"><?php echo $sectionsCount; ?></h2>
+            <h2 class="mb-0"><?php echo $roomsCount; ?></h2>
         </div>
     </div>
     <div class="col-6 col-lg">
@@ -254,13 +254,13 @@ require_once __DIR__ . '/../includes/admin_header.php';
     <div class="col-lg-6">
         <div class="card p-3 h-100">
             <div class="d-flex justify-content-between align-items-center mb-3">
-                <h6 class="mb-0">Attendance Rate by Section</h6>
-                <?php if ($sectionData): ?>
-                    <button type="button" class="btn btn-sm sp-export-btn" id="spExportSectionPdf" title="Export as PDF"><i class="fa-solid fa-file-pdf"></i></button>
+                <h6 class="mb-0">Attendance Rate by Room</h6>
+                <?php if ($roomData): ?>
+                    <button type="button" class="btn btn-sm sp-export-btn" id="spExportRoomPdf" title="Export as PDF"><i class="fa-solid fa-file-pdf"></i></button>
                 <?php endif; ?>
             </div>
-            <?php if ($sectionData): ?>
-                <div style="height:240px;"><canvas id="sectionChart"></canvas></div>
+            <?php if ($roomData): ?>
+                <div style="height:240px;"><canvas id="roomChart"></canvas></div>
             <?php else: ?>
                 <p class="text-muted small mb-0">Not enough data yet.</p>
             <?php endif; ?>
@@ -345,13 +345,13 @@ require_once __DIR__ . '/../includes/admin_header.php';
                 <div class="table-responsive">
                     <table class="table table-sm align-middle mb-0">
                         <thead>
-                            <tr><th>Student</th><th>Course/Section</th><th class="text-center">Absent</th><th class="text-center">Late</th></tr>
+                            <tr><th>Student</th><th>Course/Room</th><th class="text-center">Absent</th><th class="text-center">Late</th></tr>
                         </thead>
                         <tbody>
                             <?php while ($row = $atRiskResult->fetch_assoc()): ?>
                                 <tr>
                                     <td><?php echo htmlspecialchars($row['first_name'] . ' ' . $row['last_name']); ?></td>
-                                    <td class="text-muted small"><?php echo htmlspecialchars(trim(($row['course_code'] ?: '') . ' ' . ($row['section_name'] ?: ''))); ?></td>
+                                    <td class="text-muted small"><?php echo htmlspecialchars(trim(($row['course_code'] ?: '') . ' ' . ($row['room_name'] ?: ''))); ?></td>
                                     <td class="text-center"><span class="badge bg-danger"><?php echo (int) $row['absents']; ?></span></td>
                                     <td class="text-center"><span class="badge bg-warning"><?php echo (int) $row['lates']; ?></span></td>
                                 </tr>
@@ -379,7 +379,7 @@ require_once __DIR__ . '/../includes/admin_header.php';
                         <?php while ($row = $studentsList->fetch_assoc()): ?>
                             <li class="list-group-item d-flex justify-content-between align-items-center">
                                 <span><?php echo htmlspecialchars($row['first_name'] . ' ' . $row['last_name']); ?></span>
-                                <span class="text-muted small"><?php echo htmlspecialchars(trim(($row['course_code'] ?: '') . ' ' . ($row['section_name'] ?: ''))); ?></span>
+                                <span class="text-muted small"><?php echo htmlspecialchars(trim(($row['course_code'] ?: '') . ' ' . ($row['room_name'] ?: ''))); ?></span>
                             </li>
                         <?php endwhile; ?>
                     <?php endif; ?>
@@ -439,20 +439,20 @@ require_once __DIR__ . '/../includes/admin_header.php';
     </div>
 </div>
 
-<div class="modal fade" id="sectionsListModal" tabindex="-1" aria-hidden="true">
+<div class="modal fade" id="roomsListModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content rounded-4">
             <div class="modal-header">
-                <h5 class="modal-title">Sections (<?php echo $sectionsCount; ?>)</h5>
+                <h5 class="modal-title">Rooms (<?php echo $roomsCount; ?>)</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
                 <ul class="list-group list-group-flush">
-                    <?php if ($sectionsListDash->num_rows === 0): ?>
-                        <li class="list-group-item text-muted small">No sections yet.</li>
+                    <?php if ($roomsListDash->num_rows === 0): ?>
+                        <li class="list-group-item text-muted small">No rooms yet.</li>
                     <?php else: ?>
-                        <?php while ($row = $sectionsListDash->fetch_assoc()): ?>
-                            <li class="list-group-item"><?php echo htmlspecialchars($row['year_level'] . ' - ' . $row['section_name']); ?></li>
+                        <?php while ($row = $roomsListDash->fetch_assoc()): ?>
+                            <li class="list-group-item"><?php echo htmlspecialchars($row['year_level'] . ' - ' . $row['room_name']); ?></li>
                         <?php endwhile; ?>
                     <?php endif; ?>
                 </ul>
@@ -588,12 +588,12 @@ document.addEventListener('DOMContentLoaded', function () {
     spWireExportBtn('spExportDowPdf', dowChart, 'Peak Absence Days');
     <?php endif; ?>
 
-    <?php if ($sectionData): ?>
-    var sectionChart = new Chart(document.getElementById('sectionChart'), {
+    <?php if ($roomData): ?>
+    var roomChart = new Chart(document.getElementById('roomChart'), {
         type: 'bar',
         data: {
-            labels: <?php echo json_encode($sectionLabels); ?>,
-            datasets: [{ label: 'Attendance Rate', data: <?php echo json_encode($sectionData); ?>, backgroundColor: greenShadesForPercent(<?php echo json_encode($sectionData); ?>), borderRadius: 6, maxBarThickness: 42 }]
+            labels: <?php echo json_encode($roomLabels); ?>,
+            datasets: [{ label: 'Attendance Rate', data: <?php echo json_encode($roomData); ?>, backgroundColor: greenShadesForPercent(<?php echo json_encode($roomData); ?>), borderRadius: 6, maxBarThickness: 42 }]
         },
         options: {
             responsive: true, maintainAspectRatio: false,
@@ -601,7 +601,7 @@ document.addEventListener('DOMContentLoaded', function () {
             scales: { y: { min: 0, max: 100, ticks: { callback: function (v) { return v + '%'; } } } }
         }
     });
-    spWireExportBtn('spExportSectionPdf', sectionChart, 'Attendance Rate by Section');
+    spWireExportBtn('spExportRoomPdf', roomChart, 'Attendance Rate by Room');
     <?php endif; ?>
 
     <?php if ($courseData): ?>

@@ -9,18 +9,18 @@ if ($studentDbId === false) {
     redirect('../dashboard.php');
 }
 
-$stmt = $mysqli->prepare('SELECT section_id FROM students WHERE id = ?');
+$stmt = $mysqli->prepare('SELECT room_id FROM students WHERE id = ?');
 $stmt->bind_param('i', $studentDbId);
 $stmt->execute();
-$stmt->bind_result($sectionId);
+$stmt->bind_result($roomId);
 $stmt->fetch();
 $stmt->close();
 
 $schedule = [];
-if ($sectionId) {
+if ($roomId) {
     $dayOrder = "FIELD(sub.day_of_week,'Mon','Tue','Wed','Thu','Fri','Sat','Sun')";
-    $stmt = $mysqli->prepare("SELECT sub.*, CONCAT(t.first_name, ' ', t.last_name) AS teacher_name FROM subjects sub LEFT JOIN teachers t ON sub.teacher_id = t.id WHERE sub.section_id = ? AND sub.status = 'active' ORDER BY $dayOrder, sub.start_time");
-    $stmt->bind_param('i', $sectionId);
+    $stmt = $mysqli->prepare("SELECT sub.*, CONCAT(t.first_name, ' ', t.last_name) AS teacher_name FROM subjects sub LEFT JOIN teachers t ON sub.teacher_id = t.id WHERE sub.room_id = ? AND sub.status = 'active' ORDER BY $dayOrder, sub.start_time");
+    $stmt->bind_param('i', $roomId);
     $stmt->execute();
     $schedule = $stmt->get_result();
 }
@@ -29,10 +29,10 @@ require_once __DIR__ . '/../includes/student_header.php';
 ?>
 <div class="card p-4">
     <h5 class="mb-3">Weekly Schedule</h5>
-    <?php if (!$sectionId): ?>
-        <div class="alert alert-info">You are not assigned to a section yet. Contact an administrator.</div>
+    <?php if (!$roomId): ?>
+        <div class="alert alert-info">You are not assigned to a room yet. Contact an administrator.</div>
     <?php elseif ($schedule->num_rows === 0): ?>
-        <div class="alert alert-info">No subjects scheduled for your section yet.</div>
+        <div class="alert alert-info">No subjects scheduled for your room yet.</div>
     <?php else: ?>
         <div class="table-responsive">
             <table class="table table-striped mb-0">

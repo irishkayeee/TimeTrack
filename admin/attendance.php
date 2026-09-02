@@ -11,7 +11,7 @@ $date = sanitize($_REQUEST['date'] ?? '');
 $dateFrom = sanitize($_REQUEST['date_from'] ?? '');
 $dateTo = sanitize($_REQUEST['date_to'] ?? '');
 $courseId = intval($_REQUEST['course_id'] ?? 0);
-$sectionId = intval($_REQUEST['section_id'] ?? 0);
+$roomId = intval($_REQUEST['room_id'] ?? 0);
 $studentQuery = sanitize($_REQUEST['student'] ?? '');
 
 $where = ['1=1'];
@@ -53,15 +53,14 @@ if ($courseId) {
     $types .= 'i';
     $params[] = $courseId;
 }
-if ($sectionId) {
-    $where[] = 'a.section_id = ?';
+if ($roomId) {
+    $where[] = 'a.room_id = ?';
     $types .= 'i';
-    $params[] = $sectionId;
+    $params[] = $roomId;
 }
 if ($studentQuery) {
-    $where[] = '(s.first_name LIKE ? OR s.last_name LIKE ? OR s.student_id LIKE ?)';
-    $types .= 'sss';
-    $params[] = '%' . $studentQuery . '%';
+    $where[] = '(CONCAT(s.first_name, " ", s.last_name) LIKE ? OR s.student_id LIKE ?)';
+    $types .= 'ss';
     $params[] = '%' . $studentQuery . '%';
     $params[] = '%' . $studentQuery . '%';
 }
@@ -71,8 +70,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'export') {
     header('Content-Type: text/csv');
     header('Content-Disposition: attachment; filename="attendance_export_' . date('Ymd_His') . '.csv"');
     $output = fopen('php://output', 'w');
-    fputcsv($output, ['Student ID','Student Name','Course','Year Level','Section','Subject','Status','Date','Time']);
-    $query = 'SELECT s.student_id, s.year_level, CONCAT(s.first_name, " ", s.last_name) AS full_name, c.code AS course_code, sec.section_name, sub.name AS subject_name, a.status, a.date, a.time FROM attendance a LEFT JOIN students s ON a.student_id = s.id LEFT JOIN courses c ON a.course_id = c.id LEFT JOIN sections sec ON a.section_id = sec.id LEFT JOIN subjects sub ON a.subject_id = sub.id WHERE ' . $whereSql . ' ORDER BY a.created_at DESC';
+    fputcsv($output, ['Student ID','Student Name','Course','Year Level','Room','Subject','Status','Date','Time']);
+    $query = 'SELECT s.student_id, s.year_level, CONCAT(s.first_name, " ", s.last_name) AS full_name, c.code AS course_code, sec.room_name, sub.name AS subject_name, a.status, a.date, a.time FROM attendance a LEFT JOIN students s ON a.student_id = s.id LEFT JOIN courses c ON a.course_id = c.id LEFT JOIN rooms sec ON a.room_id = sec.id LEFT JOIN subjects sub ON a.subject_id = sub.id WHERE ' . $whereSql . ' ORDER BY a.created_at DESC';
     $stmt = $mysqli->prepare($query);
     if ($params) {
         $stmt->bind_param($types, ...$params);
@@ -80,14 +79,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'export') {
     $stmt->execute();
     $result = $stmt->get_result();
     while ($row = $result->fetch_assoc()) {
-        fputcsv($output, [$row['student_id'], $row['full_name'], $row['course_code'], $row['year_level'], $row['section_name'], $row['subject_name'], $row['status'], $row['date'], $row['time']]);
+        fputcsv($output, [$row['student_id'], $row['full_name'], $row['course_code'], $row['year_level'], $row['room_name'], $row['subject_name'], $row['status'], $row['date'], $row['time']]);
     }
     fclose($output);
     exit;
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'export_pdf') {
-    $query = 'SELECT s.student_id, s.year_level, CONCAT(s.first_name, " ", s.last_name) AS full_name, c.code AS course_code, sec.section_name, sub.name AS subject_name, a.status, a.date, a.time FROM attendance a LEFT JOIN students s ON a.student_id = s.id LEFT JOIN courses c ON a.course_id = c.id LEFT JOIN sections sec ON a.section_id = sec.id LEFT JOIN subjects sub ON a.subject_id = sub.id WHERE ' . $whereSql . ' ORDER BY a.created_at DESC';
+    $query = 'SELECT s.student_id, s.year_level, CONCAT(s.first_name, " ", s.last_name) AS full_name, c.code AS course_code, sec.room_name, sub.name AS subject_name, a.status, a.date, a.time FROM attendance a LEFT JOIN students s ON a.student_id = s.id LEFT JOIN courses c ON a.course_id = c.id LEFT JOIN rooms sec ON a.room_id = sec.id LEFT JOIN subjects sub ON a.subject_id = sub.id WHERE ' . $whereSql . ' ORDER BY a.created_at DESC';
     $stmt = $mysqli->prepare($query);
     if ($params) {
         $stmt->bind_param($types, ...$params);
@@ -96,9 +95,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'export_pdf') 
     $result = $stmt->get_result();
     $rows = [];
     while ($row = $result->fetch_assoc()) {
-        $rows[] = [$row['date'], $row['time'], $row['full_name'], $row['student_id'], $row['course_code'] ?: '-', $row['section_name'] ?: '-', $row['subject_name'] ?: '-', ucfirst($row['status'])];
+        $rows[] = [$row['date'], $row['time'], $row['full_name'], $row['student_id'], $row['course_code'] ?: '-', $row['room_name'] ?: '-', $row['subject_name'] ?: '-', ucfirst($row['status'])];
     }
-    $pdf = generateSimpleTablePdf('Attendance Records', ['Date', 'Time', 'Student', 'ID', 'Course', 'Section', 'Subject', 'Status'], $rows, [65, 55, 130, 65, 60, 80, 130, 70]);
+    $pdf = generateSimpleTablePdf('Attendance Records', ['Date', 'Time', 'Student', 'ID', 'Course', 'Room', 'Subject', 'Status'], $rows, [65, 55, 130, 65, 60, 80, 130, 70]);
     header('Content-Type: application/pdf');
     header('Content-Disposition: attachment; filename="attendance_export_' . date('Ymd_His') . '.pdf"');
     header('Content-Length: ' . strlen($pdf));
@@ -107,8 +106,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'export_pdf') 
 }
 
 $courses = $mysqli->query('SELECT id, code FROM courses ORDER BY code');
-$sections = $mysqli->query('SELECT id, section_name FROM sections ORDER BY section_name');
-$query = 'SELECT a.*, s.student_id, s.photo, s.year_level, CONCAT(s.first_name, " ", s.last_name) AS student_name, c.code AS course_code, sec.section_name, sub.name AS subject_name FROM attendance a LEFT JOIN students s ON a.student_id = s.id LEFT JOIN courses c ON a.course_id = c.id LEFT JOIN sections sec ON a.section_id = sec.id LEFT JOIN subjects sub ON a.subject_id = sub.id WHERE ' . $whereSql . ' ORDER BY a.created_at DESC';
+$rooms = $mysqli->query('SELECT id, room_name FROM rooms ORDER BY room_name');
+$query = 'SELECT a.*, s.student_id, s.photo, s.year_level, CONCAT(s.first_name, " ", s.last_name) AS student_name, c.code AS course_code, sec.room_name, sub.name AS subject_name FROM attendance a LEFT JOIN students s ON a.student_id = s.id LEFT JOIN courses c ON a.course_id = c.id LEFT JOIN rooms sec ON a.room_id = sec.id LEFT JOIN subjects sub ON a.subject_id = sub.id WHERE ' . $whereSql . ' ORDER BY a.created_at DESC';
 $stmt = $mysqli->prepare($query);
 if ($params) {
     $stmt->bind_param($types, ...$params);
@@ -129,7 +128,7 @@ require_once __DIR__ . '/../includes/admin_header.php';
                 <input type="hidden" name="date_from" value="<?php echo htmlspecialchars($dateFrom); ?>">
                 <input type="hidden" name="date_to" value="<?php echo htmlspecialchars($dateTo); ?>">
                 <input type="hidden" name="course_id" value="<?php echo htmlspecialchars($courseId); ?>">
-                <input type="hidden" name="section_id" value="<?php echo htmlspecialchars($sectionId); ?>">
+                <input type="hidden" name="room_id" value="<?php echo htmlspecialchars($roomId); ?>">
                 <input type="hidden" name="student" value="<?php echo htmlspecialchars($studentQuery); ?>">
                 <button type="submit" class="btn btn-outline-success">Export CSV</button>
             </form>
@@ -141,7 +140,7 @@ require_once __DIR__ . '/../includes/admin_header.php';
                 <input type="hidden" name="date_from" value="<?php echo htmlspecialchars($dateFrom); ?>">
                 <input type="hidden" name="date_to" value="<?php echo htmlspecialchars($dateTo); ?>">
                 <input type="hidden" name="course_id" value="<?php echo htmlspecialchars($courseId); ?>">
-                <input type="hidden" name="section_id" value="<?php echo htmlspecialchars($sectionId); ?>">
+                <input type="hidden" name="room_id" value="<?php echo htmlspecialchars($roomId); ?>">
                 <input type="hidden" name="student" value="<?php echo htmlspecialchars($studentQuery); ?>">
                 <button type="submit" class="btn btn-outline-primary">Download PDF</button>
             </form>
@@ -180,11 +179,11 @@ require_once __DIR__ . '/../includes/admin_header.php';
             </select>
         </div>
         <div class="flex-fill" style="min-width: 160px;">
-            <label class="form-label">Section</label>
-            <select class="form-select" name="section_id">
-                <option value="">All sections</option>
-                <?php while ($section = $sections->fetch_assoc()): ?>
-                    <option value="<?php echo $section['id']; ?>" <?php echo $sectionId == $section['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($section['section_name']); ?></option>
+            <label class="form-label">Room</label>
+            <select class="form-select" name="room_id">
+                <option value="">All rooms</option>
+                <?php while ($room = $rooms->fetch_assoc()): ?>
+                    <option value="<?php echo $room['id']; ?>" <?php echo $roomId == $room['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($room['room_name']); ?></option>
                 <?php endwhile; ?>
             </select>
         </div>
@@ -208,7 +207,7 @@ require_once __DIR__ . '/../includes/admin_header.php';
                     <th>ID</th>
                     <th>Course</th>
                     <th>Year</th>
-                    <th>Section</th>
+                    <th>Room</th>
                     <th>Subject</th>
                     <th>Status</th>
                 </tr>
@@ -229,7 +228,7 @@ require_once __DIR__ . '/../includes/admin_header.php';
                         <td><?php echo htmlspecialchars($row['student_id']); ?></td>
                         <td><?php echo htmlspecialchars($row['course_code']); ?></td>
                         <td><?php echo htmlspecialchars($row['year_level']); ?></td>
-                        <td><?php echo htmlspecialchars($row['section_name']); ?></td>
+                        <td><?php echo htmlspecialchars($row['room_name']); ?></td>
                         <td><?php echo htmlspecialchars($row['subject_name']); ?></td>
                         <td><?php echo badgeStatus($row['status']); ?></td>
                     </tr>

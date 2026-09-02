@@ -21,9 +21,9 @@ $subjectsStmt->close();
 
 $scopedSubject = null;
 if ($subjectId) {
-    $scopedStmt = $mysqli->prepare('SELECT sub.*, sec.section_name, sec.year_level, c.code AS course_code, c.name AS course_name
+    $scopedStmt = $mysqli->prepare('SELECT sub.*, sec.room_name, sec.year_level, c.code AS course_code, c.name AS course_name
         FROM subjects sub
-        JOIN sections sec ON sub.section_id = sec.id
+        JOIN rooms sec ON sub.room_id = sec.id
         JOIN courses c ON sec.course_id = c.id
         WHERE sub.id = ? AND sub.teacher_id = ? LIMIT 1');
     $scopedStmt->bind_param('ii', $subjectId, $teacherId);
@@ -32,7 +32,7 @@ if ($subjectId) {
     $scopedStmt->close();
 }
 
-$query = 'SELECT a.*, s.student_id, CONCAT(s.first_name, " ", s.last_name) AS student_name, c.code AS course_code, sec.section_name, sub.name AS subject_name FROM attendance a LEFT JOIN students s ON a.student_id = s.id LEFT JOIN courses c ON a.course_id = c.id LEFT JOIN sections sec ON a.section_id = sec.id JOIN subjects sub ON a.subject_id = sub.id WHERE a.date = ? AND sub.teacher_id = ?';
+$query = 'SELECT a.*, s.student_id, CONCAT(s.first_name, " ", s.last_name) AS student_name, c.code AS course_code, sec.room_name, sub.name AS subject_name FROM attendance a LEFT JOIN students s ON a.student_id = s.id LEFT JOIN courses c ON a.course_id = c.id LEFT JOIN rooms sec ON a.room_id = sec.id JOIN subjects sub ON a.subject_id = sub.id WHERE a.date = ? AND sub.teacher_id = ?';
 $types = 'si';
 $params = [$date, $teacherId];
 if ($subjectId) {
@@ -73,7 +73,7 @@ require_once __DIR__ . '/../includes/teacher_header.php';
     <div class="table-responsive">
         <table class="table table-striped" id="teacherAttendanceTable">
             <thead class="table-light">
-                <tr><th>Date</th><th>Time</th><th>Student</th><th>ID</th><th>Subject</th><th>Section</th><th>Status</th></tr>
+                <tr><th>Date</th><th>Time</th><th>Student</th><th>ID</th><th>Subject</th><th>Room</th><th>Status</th></tr>
             </thead>
             <tbody>
                 <?php while ($row = $result->fetch_assoc()): ?>
@@ -83,7 +83,7 @@ require_once __DIR__ . '/../includes/teacher_header.php';
                         <td><?php echo htmlspecialchars($row['student_name']); ?></td>
                         <td><?php echo htmlspecialchars($row['student_id']); ?></td>
                         <td><?php echo htmlspecialchars($row['subject_name']); ?></td>
-                        <td><?php echo htmlspecialchars($row['section_name']); ?></td>
+                        <td><?php echo htmlspecialchars($row['room_name']); ?></td>
                         <td><?php echo badgeStatus($row['status']); ?></td>
                     </tr>
                 <?php endwhile; ?>

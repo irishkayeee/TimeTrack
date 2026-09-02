@@ -14,7 +14,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $firstName = sanitize($_POST['first_name'] ?? '');
         $lastName = sanitize($_POST['last_name'] ?? '');
         $subject = sanitize($_POST['subject'] ?? '');
-        $sectionId = intval($_POST['section_id'] ?? 0) ?: null;
+        $roomId = intval($_POST['room_id'] ?? 0) ?: null;
         $phone = sanitize($_POST['phone'] ?? '');
         $email = sanitize($_POST['email'] ?? '');
         $status = sanitize($_POST['status'] ?? 'active');
@@ -28,18 +28,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
         if ($id) {
-            $stmt = $mysqli->prepare('UPDATE teachers SET teacher_id = ?, first_name = ?, last_name = ?, subject = ?, section_id = ?, phone = ?, email = ?, status = ?' . ($photo ? ', photo = ?' : '') . ' WHERE id = ?');
+            $stmt = $mysqli->prepare('UPDATE teachers SET teacher_id = ?, first_name = ?, last_name = ?, subject = ?, room_id = ?, phone = ?, email = ?, status = ?' . ($photo ? ', photo = ?' : '') . ' WHERE id = ?');
             if ($photo) {
-                $stmt->bind_param('ssssissssi', $teacherId, $firstName, $lastName, $subject, $sectionId, $phone, $email, $status, $photo, $id);
+                $stmt->bind_param('ssssissssi', $teacherId, $firstName, $lastName, $subject, $roomId, $phone, $email, $status, $photo, $id);
             } else {
-                $stmt->bind_param('ssssisssi', $teacherId, $firstName, $lastName, $subject, $sectionId, $phone, $email, $status, $id);
+                $stmt->bind_param('ssssisssi', $teacherId, $firstName, $lastName, $subject, $roomId, $phone, $email, $status, $id);
             }
             $stmt->execute();
             $stmt->close();
             flash('Teacher updated successfully.', 'success');
         } else {
-            $stmt = $mysqli->prepare('INSERT INTO teachers (teacher_id, first_name, last_name, subject, section_id, phone, email, photo, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())');
-            $stmt->bind_param('ssssissss', $teacherId, $firstName, $lastName, $subject, $sectionId, $phone, $email, $photo, $status);
+            $stmt = $mysqli->prepare('INSERT INTO teachers (teacher_id, first_name, last_name, subject, room_id, phone, email, photo, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())');
+            $stmt->bind_param('ssssissss', $teacherId, $firstName, $lastName, $subject, $roomId, $phone, $email, $photo, $status);
             $stmt->execute();
             $stmt->close();
             $newTeacherId = $mysqli->insert_id;
@@ -108,8 +108,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 $courses = $mysqli->query('SELECT id, code FROM courses ORDER BY code');
-$sections = $mysqli->query('SELECT id, section_name FROM sections ORDER BY section_name');
-$teachers = $mysqli->query('SELECT t.*, sec.section_name FROM teachers t LEFT JOIN sections sec ON t.section_id = sec.id ORDER BY t.created_at DESC');
+$rooms = $mysqli->query('SELECT id, room_name FROM rooms ORDER BY room_name');
+$teachers = $mysqli->query('SELECT t.*, sec.room_name FROM teachers t LEFT JOIN rooms sec ON t.room_id = sec.id ORDER BY t.created_at DESC');
 $newCredentials = flashCredentialsMessage();
 require_once __DIR__ . '/../includes/admin_header.php';
 ?>
@@ -134,7 +134,7 @@ require_once __DIR__ . '/../includes/admin_header.php';
                     <th>Teacher ID</th>
                     <th>Name</th>
                     <th>Subject</th>
-                    <th>Section</th>
+                    <th>Room</th>
                     <th>Status</th>
                     <th>Created</th>
                     <th>Actions</th>
@@ -146,7 +146,7 @@ require_once __DIR__ . '/../includes/admin_header.php';
                         <td><?php echo htmlspecialchars($row['teacher_id']); ?></td>
                         <td><?php echo htmlspecialchars($row['first_name'] . ' ' . $row['last_name']); ?></td>
                         <td><?php echo htmlspecialchars($row['subject']); ?></td>
-                        <td><?php echo htmlspecialchars($row['section_name']); ?></td>
+                        <td><?php echo htmlspecialchars($row['room_name']); ?></td>
                         <td><?php echo badgeStatus($row['status']); ?></td>
                         <td><?php echo formatDateTime($row['created_at']); ?></td>
                         <td>
@@ -212,11 +212,11 @@ require_once __DIR__ . '/../includes/admin_header.php';
                         <input type="text" class="form-control" name="phone" id="teacherPhoneField">
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label">Section</label>
-                        <select class="form-select" name="section_id" id="teacherSectionField">
+                        <label class="form-label">Room</label>
+                        <select class="form-select" name="room_id" id="teacherRoomField">
                             <option value="0">Unassigned</option>
-                            <?php while ($section = $sections->fetch_assoc()): ?>
-                                <option value="<?php echo $section['id']; ?>"><?php echo htmlspecialchars($section['section_name']); ?></option>
+                            <?php while ($room = $rooms->fetch_assoc()): ?>
+                                <option value="<?php echo $room['id']; ?>"><?php echo htmlspecialchars($room['room_name']); ?></option>
                             <?php endwhile; ?>
                         </select>
                     </div>
@@ -255,7 +255,7 @@ require_once __DIR__ . '/../includes/admin_header.php';
                     <dt class="col-5">Teacher Code</dt><dd class="col-7" id="viewTeacherCode"></dd>
                     <dt class="col-5">Name</dt><dd class="col-7" id="viewTeacherName"></dd>
                     <dt class="col-5">Subject</dt><dd class="col-7" id="viewTeacherSubject"></dd>
-                    <dt class="col-5">Section</dt><dd class="col-7" id="viewTeacherSection"></dd>
+                    <dt class="col-5">Room</dt><dd class="col-7" id="viewTeacherRoom"></dd>
                     <dt class="col-5">Status</dt><dd class="col-7" id="viewTeacherStatus"></dd>
                     <dt class="col-5">Email</dt><dd class="col-7" id="viewTeacherEmail"></dd>
                     <dt class="col-5">Phone</dt><dd class="col-7" id="viewTeacherPhone"></dd>
@@ -288,7 +288,7 @@ document.querySelectorAll('.btn-view-teacher').forEach(btn => {
         document.getElementById('viewTeacherCode').textContent = data.teacher_id || '—';
         document.getElementById('viewTeacherName').textContent = `${data.first_name || ''} ${data.last_name || ''}`.trim() || '—';
         document.getElementById('viewTeacherSubject').textContent = data.subject || '—';
-        document.getElementById('viewTeacherSection').textContent = data.section_name || 'Unassigned';
+        document.getElementById('viewTeacherRoom').textContent = data.room_name || 'Unassigned';
         document.getElementById('viewTeacherStatus').innerHTML = `<span class="badge bg-${statusBadgeClass[data.status] || 'secondary'}">${(data.status || '').charAt(0).toUpperCase() + (data.status || '').slice(1)}</span>`;
         document.getElementById('viewTeacherEmail').textContent = data.email || '—';
         document.getElementById('viewTeacherPhone').textContent = data.phone || '—';
@@ -314,7 +314,7 @@ document.querySelectorAll('.btn-edit-teacher').forEach(btn => {
         document.getElementById('teacherLastNameField').value = data.last_name;
         document.getElementById('teacherEmailField').value = data.email;
         document.getElementById('teacherPhoneField').value = data.phone;
-        document.getElementById('teacherSectionField').value = data.section_id;
+        document.getElementById('teacherRoomField').value = data.room_id;
         document.getElementById('teacherStatusField').value = data.status;
         teacherModal.show();
     });

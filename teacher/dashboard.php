@@ -28,20 +28,20 @@ $stmt->fetch();
 $stmt->close();
 
 $myStudentsCount = 0;
-$sectionStmt = $mysqli->prepare('SELECT DISTINCT sec.id FROM subjects sub JOIN sections sec ON sub.section_id = sec.id WHERE sub.teacher_id = ?');
-$sectionStmt->bind_param('i', $teacherId);
-$sectionStmt->execute();
-$sectionResult = $sectionStmt->get_result();
-$allowedSections = [];
-while ($row = $sectionResult->fetch_assoc()) {
-    $allowedSections[] = (int) $row['id'];
+$roomStmt = $mysqli->prepare('SELECT DISTINCT sec.id FROM subjects sub JOIN rooms sec ON sub.room_id = sec.id WHERE sub.teacher_id = ?');
+$roomStmt->bind_param('i', $teacherId);
+$roomStmt->execute();
+$roomResult = $roomStmt->get_result();
+$allowedRooms = [];
+while ($row = $roomResult->fetch_assoc()) {
+    $allowedRooms[] = (int) $row['id'];
 }
-$sectionStmt->close();
-if ($allowedSections) {
-    $placeholders = implode(',', array_fill(0, count($allowedSections), '?'));
-    $types = str_repeat('i', count($allowedSections));
-    $countStmt = $mysqli->prepare("SELECT COUNT(*) FROM students WHERE section_id IN ($placeholders)");
-    $countStmt->bind_param($types, ...$allowedSections);
+$roomStmt->close();
+if ($allowedRooms) {
+    $placeholders = implode(',', array_fill(0, count($allowedRooms), '?'));
+    $types = str_repeat('i', count($allowedRooms));
+    $countStmt = $mysqli->prepare("SELECT COUNT(*) FROM students WHERE room_id IN ($placeholders)");
+    $countStmt->bind_param($types, ...$allowedRooms);
     $countStmt->execute();
     $countStmt->bind_result($myStudentsCount);
     $countStmt->fetch();
@@ -51,7 +51,7 @@ if ($allowedSections) {
 $dayMap = ['Mon' => 1, 'Tue' => 2, 'Wed' => 3, 'Thu' => 4, 'Fri' => 5, 'Sat' => 6, 'Sun' => 7];
 $todayCode = array_search((int) date('N'), $dayMap);
 
-$stmt = $mysqli->prepare("SELECT sub.*, sec.section_name FROM subjects sub JOIN sections sec ON sub.section_id = sec.id WHERE sub.teacher_id = ? AND sub.day_of_week = ? AND sub.status = 'active' ORDER BY sub.start_time");
+$stmt = $mysqli->prepare("SELECT sub.*, sec.room_name FROM subjects sub JOIN rooms sec ON sub.room_id = sec.id WHERE sub.teacher_id = ? AND sub.day_of_week = ? AND sub.status = 'active' ORDER BY sub.start_time");
 $stmt->bind_param('is', $teacherId, $todayCode);
 $stmt->execute();
 $todaySubjects = $stmt->get_result();
@@ -83,12 +83,12 @@ $trendStmt->close();
 
 $classLabels = [];
 $classData = [];
-$classStmt = $mysqli->prepare("SELECT sub.code, sec.section_name, SUM(a.status IN ('present','late')) AS attended, COUNT(a.id) AS total FROM attendance a JOIN subjects sub ON a.subject_id = sub.id JOIN sections sec ON sub.section_id = sec.id WHERE sub.teacher_id = ? GROUP BY sub.code, sec.id ORDER BY sub.code");
+$classStmt = $mysqli->prepare("SELECT sub.code, sec.room_name, SUM(a.status IN ('present','late')) AS attended, COUNT(a.id) AS total FROM attendance a JOIN subjects sub ON a.subject_id = sub.id JOIN rooms sec ON sub.room_id = sec.id WHERE sub.teacher_id = ? GROUP BY sub.code, sec.id ORDER BY sub.code");
 $classStmt->bind_param('i', $teacherId);
 $classStmt->execute();
 $classResult = $classStmt->get_result();
 while ($row = $classResult->fetch_assoc()) {
-    $classLabels[] = $row['code'] . ' - ' . $row['section_name'];
+    $classLabels[] = $row['code'] . ' - ' . $row['room_name'];
     $classData[] = $row['total'] ? round($row['attended'] / $row['total'] * 100) : 0;
 }
 $classStmt->close();
@@ -117,7 +117,7 @@ while ($row = $hourResult->fetch_assoc()) {
 }
 $hourStmt->close();
 
-$atRiskStmt = $mysqli->prepare("SELECT s.id, s.first_name, s.last_name, s.student_id, sec.section_name, SUM(a.status = 'absent') AS absents, SUM(a.status = 'late') AS lates, COUNT(a.id) AS total FROM attendance a JOIN students s ON a.student_id = s.id JOIN subjects sub ON a.subject_id = sub.id LEFT JOIN sections sec ON s.section_id = sec.id WHERE sub.teacher_id = ? GROUP BY s.id HAVING (SUM(a.status = 'absent') + SUM(a.status = 'late')) > 0 ORDER BY (SUM(a.status = 'absent') * 2 + SUM(a.status = 'late')) DESC LIMIT 10");
+$atRiskStmt = $mysqli->prepare("SELECT s.id, s.first_name, s.last_name, s.student_id, sec.room_name, SUM(a.status = 'absent') AS absents, SUM(a.status = 'late') AS lates, COUNT(a.id) AS total FROM attendance a JOIN students s ON a.student_id = s.id JOIN subjects sub ON a.subject_id = sub.id LEFT JOIN rooms sec ON s.room_id = sec.id WHERE sub.teacher_id = ? GROUP BY s.id HAVING (SUM(a.status = 'absent') + SUM(a.status = 'late')) > 0 ORDER BY (SUM(a.status = 'absent') * 2 + SUM(a.status = 'late')) DESC LIMIT 10");
 $atRiskStmt->bind_param('i', $teacherId);
 $atRiskStmt->execute();
 $atRiskResult = $atRiskStmt->get_result();
@@ -129,9 +129,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'expor
     }
     $rows = [];
     while ($row = $atRiskResult->fetch_assoc()) {
-        $rows[] = [$row['student_id'], $row['first_name'] . ' ' . $row['last_name'], $row['section_name'] ?: '-', (int) $row['absents'], (int) $row['lates']];
+        $rows[] = [$row['student_id'], $row['first_name'] . ' ' . $row['last_name'], $row['room_name'] ?: '-', (int) $row['absents'], (int) $row['lates']];
     }
-    $pdf = generateSimpleTablePdf('At-Risk Students', ['ID', 'Name', 'Section', 'Absent', 'Late'], $rows, [80, 200, 160, 70, 70]);
+    $pdf = generateSimpleTablePdf('At-Risk Students', ['ID', 'Name', 'Room', 'Absent', 'Late'], $rows, [80, 200, 160, 70, 70]);
     header('Content-Type: application/pdf');
     header('Content-Disposition: attachment; filename="at_risk_students_' . date('Ymd') . '.pdf"');
     header('Content-Length: ' . strlen($pdf));
@@ -193,7 +193,7 @@ require_once __DIR__ . '/../includes/teacher_header.php';
                                 <div class="sp-subject-body">
                                     <div class="sp-subject-teacher">
                                         <div class="sp-subject-meta">
-                                            <span class="sp-subject-prof"><?php echo htmlspecialchars($row['section_name']); ?></span>
+                                            <span class="sp-subject-prof"><?php echo htmlspecialchars($row['room_name']); ?></span>
                                             <?php echo htmlspecialchars($row['day_of_week']); ?> | <?php echo formatTime($row['start_time']); ?>
                                         </div>
                                         <i class="fa-solid fa-circle-user sp-subject-avatar fa-2x text-secondary"></i>
@@ -292,13 +292,13 @@ require_once __DIR__ . '/../includes/teacher_header.php';
                 <div class="table-responsive">
                     <table class="table table-sm align-middle mb-0">
                         <thead>
-                            <tr><th>Student</th><th>Section</th><th class="text-center">Absent</th><th class="text-center">Late</th></tr>
+                            <tr><th>Student</th><th>Room</th><th class="text-center">Absent</th><th class="text-center">Late</th></tr>
                         </thead>
                         <tbody>
                             <?php while ($row = $atRiskResult->fetch_assoc()): ?>
                                 <tr>
                                     <td><?php echo htmlspecialchars($row['first_name'] . ' ' . $row['last_name']); ?></td>
-                                    <td class="text-muted small"><?php echo htmlspecialchars($row['section_name'] ?: '-'); ?></td>
+                                    <td class="text-muted small"><?php echo htmlspecialchars($row['room_name'] ?: '-'); ?></td>
                                     <td class="text-center"><span class="badge bg-danger"><?php echo (int) $row['absents']; ?></span></td>
                                     <td class="text-center"><span class="badge bg-warning"><?php echo (int) $row['lates']; ?></span></td>
                                 </tr>

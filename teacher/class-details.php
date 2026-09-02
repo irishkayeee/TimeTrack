@@ -9,9 +9,9 @@ if ($teacherId === false) {
 }
 
 $subjectId = intval($_GET['id'] ?? 0);
-$stmt = $mysqli->prepare('SELECT sub.*, sec.section_name, sec.year_level, c.code AS course_code, c.name AS course_name
+$stmt = $mysqli->prepare('SELECT sub.*, sec.room_name, sec.year_level, c.code AS course_code, c.name AS course_name
     FROM subjects sub
-    JOIN sections sec ON sub.section_id = sec.id
+    JOIN rooms sec ON sub.room_id = sec.id
     JOIN courses c ON sec.course_id = c.id
     WHERE sub.id = ? AND sub.teacher_id = ? LIMIT 1');
 $stmt->bind_param('ii', $subjectId, $teacherId);
