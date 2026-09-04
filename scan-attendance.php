@@ -50,8 +50,18 @@ if ($result->num_rows === 0) {
 $student = $result->fetch_assoc();
 $stmt->close();
 
-if (intval($student['room_id']) !== intval($subject['room_id'])) {
-    echo json_encode(['status' => 'error', 'message' => 'This student is not enrolled in this subject\'s room.']);
+$isRoomMember = intval($student['room_id']) === intval($subject['room_id']);
+$isClassEnrolled = false;
+if (!$isRoomMember) {
+    $enrollCheck = $mysqli->prepare('SELECT id FROM enrollments WHERE student_id = ? AND subject_id = ? LIMIT 1');
+    $enrollCheck->bind_param('ii', $student['id'], $subjectId);
+    $enrollCheck->execute();
+    $enrollCheck->store_result();
+    $isClassEnrolled = $enrollCheck->num_rows > 0;
+    $enrollCheck->close();
+}
+if (!$isRoomMember && !$isClassEnrolled) {
+    echo json_encode(['status' => 'error', 'message' => 'This student is not enrolled in this subject.']);
     exit;
 }
 

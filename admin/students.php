@@ -11,7 +11,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($_POST['action'] === 'save_student') {
         $result = saveStudentRecord($mysqli, $_POST, $_FILES, null);
         if ($result['credentials']) {
-            flashCredentials($result['credentials']['username'], $result['credentials']['password']);
+            flashCredentials($result['credentials']['username'], $result['credentials']['password'], $result['credentials']['emailed']);
         } else {
             flash($result['message'], $result['type']);
         }
@@ -41,10 +41,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $stmt2->bind_param('ii', $userId, $sid);
                     $stmt2->execute();
                     $stmt2->close();
-                    if ($studentEmail) {
-                        emailStudentCredentials($studentEmail, trim($studentFirstName . ' ' . $studentLastName), $studentCode, $plainPassword);
-                    }
-                    flashCredentials($studentCode, $plainPassword);
+                    $emailed = $studentEmail && emailStudentCredentials($studentEmail, trim($studentFirstName . ' ' . $studentLastName), $studentCode, $plainPassword);
+                    flashCredentials($studentCode, $plainPassword, $emailed);
                 } else {
                     flash('Unable to create a login account (email may already be in use).', 'danger');
                 }
@@ -127,12 +125,19 @@ require_once __DIR__ . '/../includes/admin_header.php';
             <span class="me-3">Username: <code><?php echo htmlspecialchars($newCredentials['username']); ?></code></span>
             <span>Password: <code><?php echo htmlspecialchars($newCredentials['password']); ?></code></span>
         </div>
+        <div class="mt-2">
+            <?php if (!empty($newCredentials['emailed'])): ?>
+                <span class="badge bg-success-subtle text-success border border-success-subtle"><i class="fa-solid fa-envelope-circle-check me-1"></i>Emailed to the student</span>
+            <?php else: ?>
+                <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle"><i class="fa-solid fa-triangle-exclamation me-1"></i>Not emailed — share these credentials manually</span>
+            <?php endif; ?>
+        </div>
     </div>
 <?php endif; ?>
 <div class="card rounded-4 shadow-sm p-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h4>Student Management</h4>
-        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#studentModal">Add Student</button>
+        <button class="btn btn-primary" id="addStudentBtn" data-bs-toggle="modal" data-bs-target="#studentModal">Add Student</button>
     </div>
     <div class="table-responsive">
         <table class="table table-hover" id="studentsTable">
@@ -234,7 +239,7 @@ require_once __DIR__ . '/../includes/admin_header.php';
                 <div class="modal-body row g-3">
                     <div class="col-md-6">
                         <label class="form-label">Student Code</label>
-                        <input type="text" class="form-control" name="student_id" id="studentCodeField">
+                        <input type="text" class="form-control" name="student_id" id="studentCodeField" required>
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">First Name</label>
@@ -315,6 +320,26 @@ require_once __DIR__ . '/../includes/admin_header.php';
 </div>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+const addStudentBtn = document.getElementById('addStudentBtn');
+if (addStudentBtn) {
+    addStudentBtn.addEventListener('click', () => {
+        document.getElementById('studentIdField').value = '';
+        document.getElementById('studentCodeField').value = '';
+        document.getElementById('firstNameField').value = '';
+        document.getElementById('lastNameField').value = '';
+        document.getElementById('genderField').value = 'Male';
+        document.getElementById('birthdayField').value = '';
+        document.getElementById('guardianField').value = '';
+        document.getElementById('guardianEmailField').value = '';
+        document.getElementById('phoneField').value = '';
+        document.getElementById('emailField').value = '';
+        document.getElementById('courseField').value = '0';
+        document.getElementById('yearField').value = '';
+        document.getElementById('roomField').selectedIndex = 0;
+        document.getElementById('statusField').value = 'active';
+    });
+}
+
 const editButtons = document.querySelectorAll('.btn-edit');
 const studentModal = new bootstrap.Modal(document.getElementById('studentModal'));
 editButtons.forEach(btn => {

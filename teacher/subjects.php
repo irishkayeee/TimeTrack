@@ -166,7 +166,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $joinCode = ensureClassJoinCode($mysqli, $newSubjectId);
-        flash('Class created! Share this join code with your students: ' . $joinCode, 'success');
+        flashClassJoinCode($name, $joinCode);
         redirect('subjects.php');
     }
 }
@@ -404,11 +404,11 @@ require_once __DIR__ . '/../includes/teacher_header.php';
                                 <br><span class="text-muted">Join Code: <strong><?php echo htmlspecialchars($group['join_code'] ?: '—'); ?></strong></span>
                             </div>
                             <div class="dropdown">
-                                <button class="btn btn-sm btn-link text-secondary p-0" type="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="fa-solid fa-ellipsis-vertical"></i></button>
-                                <ul class="dropdown-menu dropdown-menu-end">
-                                    <li><button class="dropdown-item btn-edit-schedule" type="button" data-data='<?php echo json_encode($group); ?>'>Edit Schedule</button></li>
-                                    <li><button class="dropdown-item btn-edit-policy" type="button" data-data='<?php echo json_encode($group); ?>'>Edit Attendance Policy</button></li>
-                                    <li><button class="dropdown-item btn-edit-subject-room" type="button" data-data='<?php echo json_encode($group); ?>'>Edit Subject Room</button></li>
+                                <button class="sp-menu-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="fa-solid fa-ellipsis-vertical"></i></button>
+                                <ul class="dropdown-menu dropdown-menu-end sp-menu-dropdown">
+                                    <li><button class="dropdown-item btn-edit-schedule" type="button" data-data='<?php echo json_encode($group); ?>'><i class="fa-solid fa-calendar-days"></i> Edit Schedule</button></li>
+                                    <li><button class="dropdown-item btn-edit-policy" type="button" data-data='<?php echo json_encode($group); ?>'><i class="fa-solid fa-shield-halved"></i> Edit Attendance Policy</button></li>
+                                    <li><button class="dropdown-item btn-edit-subject-room" type="button" data-data='<?php echo json_encode($group); ?>'><i class="fa-solid fa-door-open"></i> Edit Subject Room</button></li>
                                 </ul>
                             </div>
                         </div>

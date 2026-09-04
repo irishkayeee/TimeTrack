@@ -82,6 +82,19 @@ function welcomeBannerMessage() {
     return null;
 }
 
+function flashClassJoinCode($className, $joinCode) {
+    $_SESSION['flash_class_join_code'] = ['name' => $className, 'code' => $joinCode];
+}
+
+function classJoinCodeMessage() {
+    if (!empty($_SESSION['flash_class_join_code'])) {
+        $data = $_SESSION['flash_class_join_code'];
+        unset($_SESSION['flash_class_join_code']);
+        return $data;
+    }
+    return null;
+}
+
 function getSetting($key, $default = '') {
     global $mysqli;
     $stmt = $mysqli->prepare('SELECT value FROM settings WHERE name = ? LIMIT 1');
@@ -473,13 +486,12 @@ function generateSecurePassword($length = 10) {
 }
 
 function ensureRoomJoinCode($mysqli, $roomId) {
-    $joinCode = null;
     $stmt = $mysqli->prepare('SELECT join_code FROM rooms WHERE id = ? LIMIT 1');
     $stmt->bind_param('i', $roomId);
     $stmt->execute();
-    $stmt->bind_result($joinCode);
-    $stmt->fetch();
+    $row = $stmt->get_result()->fetch_assoc();
     $stmt->close();
+    $joinCode = $row['join_code'] ?? null;
 
     if ($joinCode) {
         return $joinCode;
@@ -531,11 +543,10 @@ function ensureClassJoinCode($mysqli, $subjectId) {
     $siblingStmt = $mysqli->prepare('SELECT join_code FROM subjects WHERE teacher_id <=> ? AND room_id = ? AND code = ? AND join_code IS NOT NULL LIMIT 1');
     $siblingStmt->bind_param('iis', $ref['teacher_id'], $ref['room_id'], $ref['code']);
     $siblingStmt->execute();
-    $siblingStmt->bind_result($siblingCode);
-    $hasSibling = $siblingStmt->fetch();
+    $siblingRow = $siblingStmt->get_result()->fetch_assoc();
     $siblingStmt->close();
 
-    $joinCode = ($hasSibling && $siblingCode) ? $siblingCode : null;
+    $joinCode = $siblingRow['join_code'] ?? null;
 
     if (!$joinCode) {
         $alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -595,8 +606,8 @@ function regenerateCredentials($mysqli, $userId, &$plainPassword) {
     return $result;
 }
 
-function flashCredentials($username, $password) {
-    $_SESSION['flash_credentials'] = ['username' => $username, 'password' => $password];
+function flashCredentials($username, $password, $emailed = false) {
+    $_SESSION['flash_credentials'] = ['username' => $username, 'password' => $password, 'emailed' => $emailed];
 }
 
 function flashCredentialsMessage() {
@@ -641,10 +652,10 @@ function getLiveRosterForSubject($mysqli, $subjectId) {
                      a.status AS scanned_status, a.time AS scan_time
               FROM students s
               LEFT JOIN attendance a ON a.student_id = s.id AND a.subject_id = ? AND a.date = CURDATE()
-              WHERE s.room_id = ? AND s.status = "active"
+              WHERE s.status = "active" AND (s.room_id = ? OR s.id IN (SELECT student_id FROM enrollments WHERE subject_id = ?))
               ORDER BY s.last_name, s.first_name';
     $stmt = $mysqli->prepare($query);
-    $stmt->bind_param('ii', $subjectId, $subject['room_id']);
+    $stmt->bind_param('iii', $subjectId, $subject['room_id'], $subjectId);
     $stmt->execute();
     $result = $stmt->get_result();
     $rows = [];
@@ -731,8 +742,17 @@ function saveStudentRecord($mysqli, $postData, $files, $allowedRoomIds = null) {
             return ['success' => false, 'message' => 'You can only manage students in your own rooms.', 'type' => 'danger', 'credentials' => null];
         }
     }
-    if (!$studentId) {
-        $studentId = 'S' . time() . rand(10, 99);
+    if ($studentId === '') {
+        return ['success' => false, 'message' => 'Student code is required.', 'type' => 'danger', 'credentials' => null];
+    }
+    $dupCheck = $mysqli->prepare('SELECT id FROM students WHERE student_id = ? AND id != ? LIMIT 1');
+    $dupCheck->bind_param('si', $studentId, $id);
+    $dupCheck->execute();
+    $dupCheck->store_result();
+    $isDuplicate = $dupCheck->num_rows > 0;
+    $dupCheck->close();
+    if ($isDuplicate) {
+        return ['success' => false, 'message' => 'That student code is already in use.', 'type' => 'danger', 'credentials' => null];
     }
     $courseIdParam = $courseId ?: null;
     $roomIdParam = $roomId ?: null;
@@ -773,10 +793,11 @@ function saveStudentRecord($mysqli, $postData, $files, $allowedRoomIds = null) {
         $stmt->execute();
         $stmt->close();
         $message = 'Student added successfully.';
-        if ($email && emailStudentCredentials($email, trim($firstName . ' ' . $lastName), $studentId, $plainPassword)) {
+        $emailed = $email && emailStudentCredentials($email, trim($firstName . ' ' . $lastName), $studentId, $plainPassword);
+        if ($emailed) {
             $message .= ' Login credentials were emailed to the student.';
         }
-        return ['success' => true, 'message' => $message, 'type' => 'success', 'credentials' => ['username' => $studentId, 'password' => $plainPassword]];
+        return ['success' => true, 'message' => $message, 'type' => 'success', 'credentials' => ['username' => $studentId, 'password' => $plainPassword, 'emailed' => $emailed]];
     }
     return ['success' => true, 'message' => 'Student added, but a login account could not be created (email may already be in use).', 'type' => 'warning', 'credentials' => null];
 }
@@ -795,6 +816,92 @@ function emailStudentCredentials($email, $studentName, $studentNumber, $plainPas
     return sendMail($email, $studentName, $subject, $body);
 }
 
+function emailTeacherCredentials($email, $teacherName, $teacherNumber, $plainPassword) {
+    if (!isMailConfigured()) {
+        return false;
+    }
+    $subject = 'Your TimeTrack Teacher Account';
+    $body = '<p>Hi ' . htmlspecialchars($teacherName) . ',</p>'
+        . '<p>An account has been created for you on TimeTrack. Here are your login credentials:</p>'
+        . '<p><strong>Teacher ID:</strong> ' . htmlspecialchars($teacherNumber) . '<br>'
+        . '<strong>Password:</strong> ' . htmlspecialchars($plainPassword) . '</p>'
+        . '<p>Please log in and change your password as soon as possible.</p>'
+        . '<p>— TimeTrack Attendance System</p>';
+    return sendMail($email, $teacherName, $subject, $body);
+}
+
+function findStudentByCode($mysqli, $code) {
+    $stmt = $mysqli->prepare('SELECT s.id, s.student_id, s.first_name, s.last_name, s.room_id, s.status, c.code AS course_code, sec.room_name FROM students s LEFT JOIN courses c ON s.course_id = c.id LEFT JOIN rooms sec ON s.room_id = sec.id WHERE s.student_id = ? LIMIT 1');
+    $stmt->bind_param('s', $code);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    return $row ?: null;
+}
+
+// Enrolling always scopes to this one subject via `enrollments` — it never touches the
+// student's room_id, so being enrolled in one class never makes them appear in every
+// other subject that happens to share the same room. A room_id match (home room) is
+// still honored as "already enrolled" since the roster/attendance queries also check it.
+function enrollStudentInRoom($mysqli, $studentDbId, $targetRoomId, $subjectId) {
+    $currentRoomId = null;
+    $stmt = $mysqli->prepare('SELECT room_id FROM students WHERE id = ?');
+    $stmt->bind_param('i', $studentDbId);
+    $stmt->execute();
+    $stmt->bind_result($currentRoomId);
+    $found = $stmt->fetch();
+    $stmt->close();
+    if (!$found) {
+        return 'not_found';
+    }
+    if ($currentRoomId !== null && (int) $currentRoomId === (int) $targetRoomId) {
+        return 'already_enrolled';
+    }
+    $check = $mysqli->prepare('SELECT id FROM enrollments WHERE student_id = ? AND subject_id = ? LIMIT 1');
+    $check->bind_param('ii', $studentDbId, $subjectId);
+    $check->execute();
+    $check->store_result();
+    $alreadyInClass = $check->num_rows > 0;
+    $check->close();
+    if ($alreadyInClass) {
+        return 'already_enrolled';
+    }
+    $insert = $mysqli->prepare('INSERT IGNORE INTO enrollments (student_id, subject_id) VALUES (?, ?)');
+    $insert->bind_param('ii', $studentDbId, $subjectId);
+    $insert->execute();
+    $insert->close();
+    return 'success';
+}
+
+function unenrollStudentFromRoom($mysqli, $studentDbId, $allowedRoomIds) {
+    $existingRoomId = null;
+    $check = $mysqli->prepare('SELECT room_id FROM students WHERE id = ?');
+    $check->bind_param('i', $studentDbId);
+    $check->execute();
+    $check->bind_result($existingRoomId);
+    $found = $check->fetch();
+    $check->close();
+    if (!$found || !in_array($existingRoomId, $allowedRoomIds)) {
+        return false;
+    }
+    $stmt = $mysqli->prepare('UPDATE students SET room_id = NULL WHERE id = ?');
+    $stmt->bind_param('i', $studentDbId);
+    $stmt->execute();
+    $stmt->close();
+    return true;
+}
+
+// Removes a student's individual `enrollments` link to one class (added via
+// enrollStudentInRoom's cross-room path), without touching their home room.
+function removeClassEnrollment($mysqli, $studentDbId, $subjectId) {
+    $stmt = $mysqli->prepare('DELETE FROM enrollments WHERE student_id = ? AND subject_id = ?');
+    $stmt->bind_param('ii', $studentDbId, $subjectId);
+    $stmt->execute();
+    $affected = $stmt->affected_rows > 0;
+    $stmt->close();
+    return $affected;
+}
+
 function deleteStudentRecord($mysqli, $studentDbId, $allowedRoomIds = null) {
     if ($allowedRoomIds !== null) {
         $existingRoomId = null;
@@ -808,13 +915,12 @@ function deleteStudentRecord($mysqli, $studentDbId, $allowedRoomIds = null) {
             return false;
         }
     }
-    $linkedUserId = null;
     $stmt = $mysqli->prepare('SELECT user_id FROM students WHERE id = ?');
     $stmt->bind_param('i', $studentDbId);
     $stmt->execute();
-    $stmt->bind_result($linkedUserId);
-    $stmt->fetch();
+    $row = $stmt->get_result()->fetch_assoc();
     $stmt->close();
+    $linkedUserId = $row['user_id'] ?? null;
     if ($linkedUserId) {
         $stmt = $mysqli->prepare("UPDATE users SET status = 'inactive' WHERE id = ?");
         $stmt->bind_param('i', $linkedUserId);
@@ -894,7 +1000,7 @@ function renderSubjectPageHeader($subject, $activeTab) {
             <div class="sp-subject-header-prof-name"><?php echo htmlspecialchars($subject['teacher_name'] ? 'Prof. ' . $subject['teacher_name'] : 'Unassigned'); ?></div>
             <div class="sp-subject-header-prof-role">Instructor</div>
             <?php if (!empty($subject['teacher_email'])): ?>
-                <a href="mailto:<?php echo htmlspecialchars($subject['teacher_email']); ?>" class="btn btn-outline-success rounded-pill btn-sm"><i class="fa-solid fa-envelope me-1"></i> Email Instructor</a>
+                <a href="https://mail.google.com/mail/?view=cm&fs=1&to=<?php echo urlencode($subject['teacher_email']); ?>" target="_blank" rel="noopener" class="btn btn-outline-success rounded-pill btn-sm"><i class="fa-solid fa-envelope me-1"></i> Email Instructor</a>
             <?php endif; ?>
         </div>
     </div>

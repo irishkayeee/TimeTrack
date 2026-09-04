@@ -112,6 +112,25 @@ $navItems = [
             }
         </script>
         <?php endif; ?>
+        <?php $classJoinCode = classJoinCodeMessage(); if ($classJoinCode): ?>
+        <div class="sp-welcome-overlay" id="spClassCodeOverlay">
+            <div class="sp-welcome-card">
+                <div class="sp-welcome-icon"><i class="fa-solid fa-circle-check"></i></div>
+                <h5 class="sp-welcome-title">Class created!</h5>
+                <p class="sp-welcome-message">Share this join code with your students for <strong><?php echo htmlspecialchars($classJoinCode['name']); ?></strong>:</p>
+                <div class="sp-welcome-code"><?php echo htmlspecialchars($classJoinCode['code']); ?></div>
+                <button type="button" class="sp-welcome-btn" onclick="spDismissClassCode()">Done</button>
+            </div>
+        </div>
+        <script>
+            function spDismissClassCode() {
+                var el = document.getElementById('spClassCodeOverlay');
+                if (!el) return;
+                el.classList.add('sp-flash-hide');
+                setTimeout(function () { el.remove(); }, 350);
+            }
+        </script>
+        <?php endif; ?>
         <?php $flash = flashMessage(); if ($flash): ?>
         <div class="sp-flash-overlay" id="spFlashOverlay">
             <div class="sp-flash-card sp-flash-<?php echo htmlspecialchars($flash['type']); ?>">

@@ -50,7 +50,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->bind_param('ii', $userId, $newTeacherId);
                 $stmt->execute();
                 $stmt->close();
-                flashCredentials($teacherId, $plainPassword);
+                $emailed = $email && emailTeacherCredentials($email, trim($firstName . ' ' . $lastName), $teacherId, $plainPassword);
+                flashCredentials($teacherId, $plainPassword, $emailed);
             } else {
                 flash('Teacher added, but a login account could not be created (email may already be in use). Use "Create Login" to try again.', 'warning');
             }
@@ -80,10 +81,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($_POST['action'] === 'create_teacher_credentials' && !empty($_POST['teacher_id'])) {
         $tid = intval($_POST['teacher_id']);
-        $stmt = $mysqli->prepare('SELECT teacher_id, user_id, email FROM teachers WHERE id = ?');
+        $stmt = $mysqli->prepare('SELECT teacher_id, user_id, email, first_name, last_name FROM teachers WHERE id = ?');
         $stmt->bind_param('i', $tid);
         $stmt->execute();
-        $stmt->bind_result($teacherCode, $linkedUserId, $teacherEmail);
+        $stmt->bind_result($teacherCode, $linkedUserId, $teacherEmail, $teacherFirstName, $teacherLastName);
         if ($stmt->fetch()) {
             $stmt->close();
             if ($linkedUserId) {
@@ -96,7 +97,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $stmt2->bind_param('ii', $userId, $tid);
                     $stmt2->execute();
                     $stmt2->close();
-                    flashCredentials($teacherCode, $plainPassword);
+                    $emailed = $teacherEmail && emailTeacherCredentials($teacherEmail, trim($teacherFirstName . ' ' . $teacherLastName), $teacherCode, $plainPassword);
+                    flashCredentials($teacherCode, $plainPassword, $emailed);
                 } else {
                     flash('Unable to create a login account (email may already be in use).', 'danger');
                 }
@@ -119,6 +121,13 @@ require_once __DIR__ . '/../includes/admin_header.php';
         <div class="mt-2">
             <span class="me-3">Username: <code id="credUsername"><?php echo htmlspecialchars($newCredentials['username']); ?></code></span>
             <span>Password: <code id="credPassword"><?php echo htmlspecialchars($newCredentials['password']); ?></code></span>
+        </div>
+        <div class="mt-2">
+            <?php if (!empty($newCredentials['emailed'])): ?>
+                <span class="badge bg-success-subtle text-success border border-success-subtle"><i class="fa-solid fa-envelope-circle-check me-1"></i>Emailed to the teacher</span>
+            <?php else: ?>
+                <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle"><i class="fa-solid fa-triangle-exclamation me-1"></i>Not emailed — share these credentials manually</span>
+            <?php endif; ?>
         </div>
     </div>
 <?php endif; ?>

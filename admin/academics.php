@@ -13,17 +13,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($_POST['action'] === 'save_student') {
         $result = saveStudentRecord($mysqli, $_POST, $_FILES, null);
         if ($result['credentials']) {
-            flashCredentials($result['credentials']['username'], $result['credentials']['password']);
+            flashCredentials($result['credentials']['username'], $result['credentials']['password'], $result['credentials']['emailed']);
         } else {
             flash($result['message'], $result['type']);
         }
-        redirect('academics.php');
+        redirect('academics.php?tab=students');
     }
     if ($_POST['action'] === 'delete_student' && !empty($_POST['student_id'])) {
         $sid = intval($_POST['student_id']);
         deleteStudentRecord($mysqli, $sid, null);
         flash('Student record deleted.', 'success');
-        redirect('academics.php');
+        redirect('academics.php?tab=students');
     }
     if ($_POST['action'] === 'create_student_credentials' && !empty($_POST['student_id'])) {
         $sid = intval($_POST['student_id']);
@@ -43,10 +43,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $stmt2->bind_param('ii', $userId, $sid);
                     $stmt2->execute();
                     $stmt2->close();
-                    if ($studentEmail) {
-                        emailStudentCredentials($studentEmail, trim($studentFirstName . ' ' . $studentLastName), $studentCode, $plainPassword);
-                    }
-                    flashCredentials($studentCode, $plainPassword);
+                    $emailed = $studentEmail && emailStudentCredentials($studentEmail, trim($studentFirstName . ' ' . $studentLastName), $studentCode, $plainPassword);
+                    flashCredentials($studentCode, $plainPassword, $emailed);
                 } else {
                     flash('Unable to create a login account (email may already be in use).', 'danger');
                 }
@@ -54,7 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $stmt->close();
         }
-        redirect('academics.php');
+        redirect('academics.php?tab=students');
     }
     if ($_POST['action'] === 'import_students' && !empty($_FILES['csv_file']['tmp_name'])) {
         $file = fopen($_FILES['csv_file']['tmp_name'], 'r');
@@ -87,7 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         fclose($file);
         flash('Student list imported successfully.', 'success');
-        redirect('academics.php');
+        redirect('academics.php?tab=students');
     }
     if ($_POST['action'] === 'export_students') {
         header('Content-Type: text/csv');
@@ -145,12 +143,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->bind_param('ii', $userId, $newTeacherId);
                 $stmt->execute();
                 $stmt->close();
-                flashCredentials($teacherId, $plainPassword);
+                $emailed = $email && emailTeacherCredentials($email, trim($firstName . ' ' . $lastName), $teacherId, $plainPassword);
+                flashCredentials($teacherId, $plainPassword, $emailed);
             } else {
                 flash('Teacher added, but a login account could not be created (email may already be in use). Use "Create Login" to try again.', 'warning');
             }
         }
-        redirect('academics.php');
+        redirect('academics.php?tab=teachers');
     }
     if ($_POST['action'] === 'delete_teacher' && !empty($_POST['teacher_id'])) {
         $tid = intval($_POST['teacher_id']);
@@ -171,14 +170,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->execute();
         $stmt->close();
         flash('Teacher removed.', 'success');
-        redirect('academics.php');
+        redirect('academics.php?tab=teachers');
     }
     if ($_POST['action'] === 'create_teacher_credentials' && !empty($_POST['teacher_id'])) {
         $tid = intval($_POST['teacher_id']);
-        $stmt = $mysqli->prepare('SELECT teacher_id, user_id, email FROM teachers WHERE id = ?');
+        $stmt = $mysqli->prepare('SELECT teacher_id, user_id, email, first_name, last_name FROM teachers WHERE id = ?');
         $stmt->bind_param('i', $tid);
         $stmt->execute();
-        $stmt->bind_result($teacherCode, $linkedUserId, $teacherEmail);
+        $stmt->bind_result($teacherCode, $linkedUserId, $teacherEmail, $teacherFirstName, $teacherLastName);
         if ($stmt->fetch()) {
             $stmt->close();
             if ($linkedUserId) {
@@ -191,7 +190,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $stmt2->bind_param('ii', $userId, $tid);
                     $stmt2->execute();
                     $stmt2->close();
-                    flashCredentials($teacherCode, $plainPassword);
+                    $emailed = $teacherEmail && emailTeacherCredentials($teacherEmail, trim($teacherFirstName . ' ' . $teacherLastName), $teacherCode, $plainPassword);
+                    flashCredentials($teacherCode, $plainPassword, $emailed);
                 } else {
                     flash('Unable to create a login account (email may already be in use).', 'danger');
                 }
@@ -199,7 +199,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $stmt->close();
         }
-        redirect('academics.php');
+        redirect('academics.php?tab=teachers');
     }
 
     // ---- Courses ----
@@ -221,7 +221,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->close();
             flash('Course created.', 'success');
         }
-        redirect('academics.php');
+        redirect('academics.php?tab=courses');
     }
     if ($_POST['action'] === 'delete_course' && !empty($_POST['course_id'])) {
         $id = intval($_POST['course_id']);
@@ -230,7 +230,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->execute();
         $stmt->close();
         flash('Course deleted.', 'success');
-        redirect('academics.php');
+        redirect('academics.php?tab=courses');
     }
 
     // ---- Rooms ----
@@ -254,7 +254,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->close();
             flash('Room created.', 'success');
         }
-        redirect('academics.php');
+        redirect('academics.php?tab=rooms');
     }
     if ($_POST['action'] === 'delete_room' && !empty($_POST['room_id'])) {
         $id = intval($_POST['room_id']);
@@ -263,7 +263,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->execute();
         $stmt->close();
         flash('Room removed.', 'success');
-        redirect('academics.php');
+        redirect('academics.php?tab=rooms');
     }
 
     // ---- Subjects ----
@@ -323,7 +323,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         flash($id ? 'Subject updated.' : (count($days) > 1 ? 'Subject created for ' . count($days) . ' days.' : 'Subject created.'), 'success');
-        redirect('academics.php');
+        redirect('academics.php?tab=subjects');
     }
     if ($_POST['action'] === 'delete_subject' && !empty($_POST['subject_id'])) {
         $id = intval($_POST['subject_id']);
@@ -332,7 +332,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->execute();
         $stmt->close();
         flash('Subject removed.', 'success');
-        redirect('academics.php');
+        redirect('academics.php?tab=subjects');
     }
 }
 
@@ -358,6 +358,13 @@ require_once __DIR__ . '/../includes/admin_header.php';
                         <div class="mt-2">
                             <span class="me-3">Username: <code><?php echo htmlspecialchars($newCredentials['username']); ?></code></span>
                             <span>Password: <code><?php echo htmlspecialchars($newCredentials['password']); ?></code></span>
+                        </div>
+                        <div class="mt-2">
+                            <?php if (!empty($newCredentials['emailed'])): ?>
+                                <span class="badge bg-success-subtle text-success border border-success-subtle"><i class="fa-solid fa-envelope-circle-check me-1"></i>Emailed to the account holder</span>
+                            <?php else: ?>
+                                <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle"><i class="fa-solid fa-triangle-exclamation me-1"></i>Not emailed — share these credentials manually</span>
+                            <?php endif; ?>
                         </div>
                     </div>
                 </div>
@@ -410,7 +417,13 @@ require_once __DIR__ . '/../includes/admin_header.php';
                             <option value="<?php echo htmlspecialchars($room['room_name']); ?>"><?php echo htmlspecialchars($room['room_name']); ?></option>
                         <?php endforeach; ?>
                     </select>
-                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#studentModal">Add Student</button>
+                    <button class="btn btn-primary" id="addStudentBtn" data-bs-toggle="modal" data-bs-target="#studentModal">Add Student</button>
+                </div>
+            </div>
+            <div class="mb-3">
+                <div class="sp-subject-search">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input type="text" class="form-control" id="studentSearchInput" placeholder="Search students...">
                 </div>
             </div>
             <div class="table-responsive">
@@ -502,9 +515,15 @@ require_once __DIR__ . '/../includes/admin_header.php';
 
     <div class="tab-pane fade show active" id="tab-teachers" role="tabpanel">
         <div class="card rounded-4 shadow-sm p-4">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <h6>Teacher Management</h6>
+            <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                <h6 class="mb-0">Teacher Management</h6>
                 <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#teacherModal">Add Teacher</button>
+            </div>
+            <div class="mb-3">
+                <div class="sp-subject-search">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input type="text" class="form-control" id="teachersSearchInput" placeholder="Search teachers...">
+                </div>
             </div>
             <div class="table-responsive">
                 <table class="table table-hover" id="teachersTable">
@@ -513,7 +532,6 @@ require_once __DIR__ . '/../includes/admin_header.php';
                             <th>Photo</th>
                             <th>Teacher ID</th>
                             <th>Name</th>
-                            <th>Subject</th>
                             <th>Room</th>
                             <th>Status</th>
                             <th>Created</th>
@@ -532,7 +550,6 @@ require_once __DIR__ . '/../includes/admin_header.php';
                                 </td>
                                 <td><?php echo htmlspecialchars($row['teacher_id']); ?></td>
                                 <td><?php echo htmlspecialchars($row['first_name'] . ' ' . $row['last_name']); ?></td>
-                                <td><?php echo htmlspecialchars($row['subject']); ?></td>
                                 <td><?php echo htmlspecialchars($row['room_name'] ?? ''); ?></td>
                                 <td><?php echo badgeStatus($row['status']); ?></td>
                                 <td><?php echo date('M j, Y', strtotime($row['created_at'])); ?></td>
@@ -605,6 +622,12 @@ require_once __DIR__ . '/../includes/admin_header.php';
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h6>Room Management</h6>
                 <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#roomModal">Add Room</button>
+            </div>
+            <div class="mb-3">
+                <div class="sp-subject-search">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input type="text" class="form-control" id="roomSearchInput" placeholder="Search rooms...">
+                </div>
             </div>
             <div class="table-responsive">
                 <table class="table table-hover" id="roomsTable">
@@ -699,7 +722,7 @@ require_once __DIR__ . '/../includes/admin_header.php';
                 <div class="modal-body row g-3">
                     <div class="col-md-6">
                         <label class="form-label">Student Code</label>
-                        <input type="text" class="form-control" name="student_id" id="studentCodeField">
+                        <input type="text" class="form-control" name="student_id" id="studentCodeField" required>
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">First Name</label>
@@ -743,7 +766,13 @@ require_once __DIR__ . '/../includes/admin_header.php';
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Year Level</label>
-                        <input type="text" class="form-control" name="year_level" id="yearField">
+                        <select class="form-select" name="year_level" id="yearField">
+                            <option value="">Unassigned</option>
+                            <option value="1st Year">1st Year</option>
+                            <option value="2nd Year">2nd Year</option>
+                            <option value="3rd Year">3rd Year</option>
+                            <option value="4th Year">4th Year</option>
+                        </select>
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Room</label>
@@ -1036,6 +1065,33 @@ require_once __DIR__ . '/../includes/admin_header.php';
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+const requestedTab = new URLSearchParams(window.location.search).get('tab');
+if (requestedTab) {
+    const tabBtn = document.getElementById(requestedTab + '-tab');
+    if (tabBtn) {
+        new bootstrap.Tab(tabBtn).show();
+    }
+}
+
+const addStudentBtn = document.getElementById('addStudentBtn');
+if (addStudentBtn) {
+    addStudentBtn.addEventListener('click', () => {
+        document.getElementById('studentIdField').value = '';
+        document.getElementById('studentCodeField').value = '';
+        document.getElementById('firstNameField').value = '';
+        document.getElementById('lastNameField').value = '';
+        document.getElementById('genderField').value = 'Male';
+        document.getElementById('guardianField').value = '';
+        document.getElementById('guardianEmailField').value = '';
+        document.getElementById('phoneField').value = '';
+        document.getElementById('emailField').value = '';
+        document.getElementById('courseField').value = '0';
+        document.getElementById('yearField').value = '';
+        document.getElementById('roomField').selectedIndex = 0;
+        document.getElementById('statusField').value = 'active';
+    });
+}
+
 const studentModal = new bootstrap.Modal(document.getElementById('studentModal'));
 document.querySelectorAll('.btn-edit').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -1155,7 +1211,10 @@ document.querySelectorAll('.btn-edit-subject').forEach(btn => {
     });
 });
 
-var studentsTable = $('#studentsTable').DataTable({ responsive: true, paging: false, ordering: false, dom: 'frt' });
+var studentsTable = $('#studentsTable').DataTable({ responsive: true, paging: false, ordering: false, dom: 'rt' });
+$('#studentSearchInput').on('input', function () {
+    studentsTable.search(this.value).draw();
+});
 
 function applyStudentFilters() {
     var course = $('#studentCourseFilter').val();
@@ -1166,10 +1225,16 @@ function applyStudentFilters() {
 }
 $('#studentCourseFilter, #studentRoomFilter').on('change', applyStudentFilters);
 
-$('#teachersTable').DataTable({ responsive: true, paging: false, ordering: false, dom: 'frt' });
+var teachersTable = $('#teachersTable').DataTable({ responsive: true, paging: false, ordering: false, dom: 'rt' });
+$('#teachersSearchInput').on('input', function () {
+    teachersTable.search(this.value).draw();
+});
 $('#coursesTable').DataTable({ responsive: true, paging: false, ordering: false, dom: 'frt' });
-$('#roomsTable').DataTable({ responsive: true, paging: false, ordering: false, dom: 'frt' });
-var subjectsTable = $('#subjectsTable').DataTable({ responsive: true, paging: false, ordering: false, dom: 'frt' });
+var roomsTable = $('#roomsTable').DataTable({ responsive: true, paging: false, ordering: false, dom: 'rt' });
+$('#roomSearchInput').on('input', function () {
+    roomsTable.search(this.value).draw();
+});
+var subjectsTable = $('#subjectsTable').DataTable({ responsive: true, paging: false, ordering: false, dom: 'rt' });
 $('#subjectSearchInput').on('input', function () {
     subjectsTable.search(this.value).draw();
 });
