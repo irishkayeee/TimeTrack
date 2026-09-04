@@ -25,13 +25,78 @@ $attendanceTodayList = $mysqli->query("SELECT a.status, a.time, s.first_name, s.
 $courseFilterId = intval($_GET['course_id'] ?? $_POST['course_id'] ?? 0);
 $courseFilterOptions = $mysqli->query('SELECT id, code FROM courses ORDER BY code')->fetch_all(MYSQLI_ASSOC);
 
+function sanitizeDateParam($value) {
+    if (!$value) {
+        return null;
+    }
+    $d = DateTime::createFromFormat('Y-m-d', $value);
+    return ($d && $d->format('Y-m-d') === $value) ? $value : null;
+}
+
+function resolveAnalyticsDateRange($range, $customFrom, $customTo, $schoolYearSetting) {
+    switch ($range) {
+        case 'this_week':
+            return [date('Y-m-d', strtotime('monday this week')), date('Y-m-d', strtotime('sunday this week'))];
+        case 'this_month':
+            return [date('Y-m-01'), date('Y-m-t')];
+        case 'last_month':
+            return [date('Y-m-01', strtotime('first day of last month')), date('Y-m-t', strtotime('last day of last month'))];
+        case 'this_year':
+            return [date('Y-01-01'), date('Y-12-31')];
+        case 'school_year':
+            if (preg_match('/(\d{4}).*?(\d{4})/', $schoolYearSetting, $m)) {
+                return [$m[1] . '-08-01', $m[2] . '-07-31'];
+            }
+            return [null, null];
+        case 'custom':
+            return [sanitizeDateParam($customFrom), sanitizeDateParam($customTo)];
+        default:
+            return [null, null];
+    }
+}
+
+// Builds a " WHERE ..." (or " AND ...") clause combining the Program and Range
+// filters for one query. $dateCol is the attendance date column as referenced
+// in that query (e.g. 'date' or 'a.date'); pass null to skip the date filter
+// (the Enrollment Growth chart filters students.created_at separately).
+function analyticsFilterClause($courseCol, $courseFilterId, $dateCol, $rangeFrom, $rangeTo, $mysqli, $prefix = 'WHERE') {
+    $clauses = [];
+    if ($courseFilterId) {
+        $clauses[] = "$courseCol = $courseFilterId";
+    }
+    if ($dateCol !== null) {
+        if ($rangeFrom) {
+            $clauses[] = "$dateCol >= '" . $mysqli->real_escape_string($rangeFrom) . "'";
+        }
+        if ($rangeTo) {
+            $clauses[] = "$dateCol <= '" . $mysqli->real_escape_string($rangeTo) . "'";
+        }
+    }
+    return $clauses ? " $prefix " . implode(' AND ', $clauses) : '';
+}
+
+$rangeFilter = $_GET['range'] ?? $_POST['range'] ?? '';
+$customFromInput = $_GET['date_from'] ?? $_POST['date_from'] ?? '';
+$customToInput = $_GET['date_to'] ?? $_POST['date_to'] ?? '';
+list($rangeFrom, $rangeTo) = resolveAnalyticsDateRange($rangeFilter, $customFromInput, $customToInput, $schoolYear);
+$hasDateFilter = $rangeFrom !== null || $rangeTo !== null;
+
 $guardianCoverageSql = "SELECT COUNT(*) AS total, SUM(guardian_email IS NOT NULL AND guardian_email != '') AS with_email FROM students" . ($courseFilterId ? " WHERE course_id = $courseFilterId" : '');
 $guardianCoverage = $mysqli->query($guardianCoverageSql)->fetch_assoc();
 $guardianCoveragePct = $guardianCoverage['total'] ? round($guardianCoverage['with_email'] / $guardianCoverage['total'] * 100) : 0;
 
 $trendLabels = [];
 $trendData = [];
-$trendSql = "SELECT YEARWEEK(date, 1) AS yw, MIN(date) AS week_start, SUM(status IN ('present','late')) AS attended, COUNT(*) AS total FROM attendance WHERE date >= DATE_SUB(CURDATE(), INTERVAL 8 WEEK)" . ($courseFilterId ? " AND course_id = $courseFilterId" : '') . ' GROUP BY yw ORDER BY yw';
+if ($hasDateFilter) {
+    $trendDateClause = analyticsFilterClause('course_id', $courseFilterId, 'date', $rangeFrom, $rangeTo, $mysqli);
+} else {
+    $trendClauses = ['date >= DATE_SUB(CURDATE(), INTERVAL 8 WEEK)'];
+    if ($courseFilterId) {
+        $trendClauses[] = "course_id = $courseFilterId";
+    }
+    $trendDateClause = ' WHERE ' . implode(' AND ', $trendClauses);
+}
+$trendSql = "SELECT YEARWEEK(date, 1) AS yw, MIN(date) AS week_start, SUM(status IN ('present','late')) AS attended, COUNT(*) AS total FROM attendance $trendDateClause GROUP BY yw ORDER BY yw";
 $trendResult = $mysqli->query($trendSql);
 while ($row = $trendResult->fetch_assoc()) {
     $trendLabels[] = date('M j', strtotime($row['week_start']));
@@ -40,7 +105,7 @@ while ($row = $trendResult->fetch_assoc()) {
 
 $roomLabels = [];
 $roomData = [];
-$roomRateSql = "SELECT sec.room_name, sec.year_level, SUM(a.status IN ('present','late')) AS attended, COUNT(a.id) AS total FROM attendance a JOIN rooms sec ON a.room_id = sec.id" . ($courseFilterId ? " WHERE a.course_id = $courseFilterId" : '') . ' GROUP BY sec.id ORDER BY sec.room_name';
+$roomRateSql = "SELECT sec.room_name, sec.year_level, SUM(a.status IN ('present','late')) AS attended, COUNT(a.id) AS total FROM attendance a JOIN rooms sec ON a.room_id = sec.id" . analyticsFilterClause('a.course_id', $courseFilterId, 'a.date', $rangeFrom, $rangeTo, $mysqli) . ' GROUP BY sec.id ORDER BY sec.room_name';
 $roomRateResult = $mysqli->query($roomRateSql);
 while ($row = $roomRateResult->fetch_assoc()) {
     $roomLabels[] = $row['room_name'];
@@ -49,7 +114,7 @@ while ($row = $roomRateResult->fetch_assoc()) {
 
 $courseLabels = [];
 $courseData = [];
-$courseRateSql = "SELECT c.code, SUM(a.status IN ('present','late')) AS attended, COUNT(a.id) AS total FROM attendance a JOIN courses c ON a.course_id = c.id" . ($courseFilterId ? " WHERE a.course_id = $courseFilterId" : '') . ' GROUP BY c.id ORDER BY c.code';
+$courseRateSql = "SELECT c.code, SUM(a.status IN ('present','late')) AS attended, COUNT(a.id) AS total FROM attendance a JOIN courses c ON a.course_id = c.id" . analyticsFilterClause('a.course_id', $courseFilterId, 'a.date', $rangeFrom, $rangeTo, $mysqli) . ' GROUP BY c.id ORDER BY c.code';
 $courseRateResult = $mysqli->query($courseRateSql);
 while ($row = $courseRateResult->fetch_assoc()) {
     $courseLabels[] = $row['code'];
@@ -58,7 +123,7 @@ while ($row = $courseRateResult->fetch_assoc()) {
 
 $dowLabels = [];
 $dowData = [];
-$dowSql = "SELECT DAYOFWEEK(date) AS dnum, DAYNAME(date) AS dname, SUM(status = 'absent') AS absents FROM attendance" . ($courseFilterId ? " WHERE course_id = $courseFilterId" : '') . ' GROUP BY dnum, dname ORDER BY dnum';
+$dowSql = "SELECT DAYOFWEEK(date) AS dnum, DAYNAME(date) AS dname, SUM(status = 'absent') AS absents FROM attendance" . analyticsFilterClause('course_id', $courseFilterId, 'date', $rangeFrom, $rangeTo, $mysqli) . ' GROUP BY dnum, dname ORDER BY dnum';
 $dowResult = $mysqli->query($dowSql);
 while ($row = $dowResult->fetch_assoc()) {
     $dowLabels[] = $row['dname'];
@@ -67,7 +132,7 @@ while ($row = $dowResult->fetch_assoc()) {
 
 $teacherLabels = [];
 $teacherData = [];
-$teacherRateSql = "SELECT t.first_name, t.last_name, SUM(a.status IN ('present','late')) AS attended, COUNT(a.id) AS total FROM attendance a JOIN subjects sub ON a.subject_id = sub.id JOIN teachers t ON sub.teacher_id = t.id" . ($courseFilterId ? " WHERE a.course_id = $courseFilterId" : '') . ' GROUP BY t.id ORDER BY t.first_name';
+$teacherRateSql = "SELECT t.first_name, t.last_name, SUM(a.status IN ('present','late')) AS attended, COUNT(a.id) AS total FROM attendance a JOIN subjects sub ON a.subject_id = sub.id JOIN teachers t ON sub.teacher_id = t.id" . analyticsFilterClause('a.course_id', $courseFilterId, 'a.date', $rangeFrom, $rangeTo, $mysqli) . ' GROUP BY t.id ORDER BY t.first_name';
 $teacherRateResult = $mysqli->query($teacherRateSql);
 while ($row = $teacherRateResult->fetch_assoc()) {
     $teacherLabels[] = $row['first_name'] . ' ' . substr($row['last_name'], 0, 1) . '.';
@@ -76,7 +141,7 @@ while ($row = $teacherRateResult->fetch_assoc()) {
 
 $hourLabels = [];
 $hourData = [];
-$hourSql = 'SELECT HOUR(time) AS hr, COUNT(*) AS cnt FROM attendance' . ($courseFilterId ? " WHERE course_id = $courseFilterId" : '') . ' GROUP BY hr ORDER BY hr';
+$hourSql = 'SELECT HOUR(time) AS hr, COUNT(*) AS cnt FROM attendance' . analyticsFilterClause('course_id', $courseFilterId, 'date', $rangeFrom, $rangeTo, $mysqli) . ' GROUP BY hr ORDER BY hr';
 $hourResult = $mysqli->query($hourSql);
 while ($row = $hourResult->fetch_assoc()) {
     $hourLabels[] = date('g A', strtotime($row['hr'] . ':00'));
@@ -92,7 +157,7 @@ while ($row = $enrollResult->fetch_assoc()) {
     $enrollData[] = (int) $row['cnt'];
 }
 
-$atRiskSql = "SELECT s.id, s.first_name, s.last_name, s.student_id, c.code AS course_code, sec.room_name, SUM(a.status = 'absent') AS absents, SUM(a.status = 'late') AS lates, COUNT(a.id) AS total FROM attendance a JOIN students s ON a.student_id = s.id LEFT JOIN courses c ON s.course_id = c.id LEFT JOIN rooms sec ON s.room_id = sec.id" . ($courseFilterId ? " WHERE a.course_id = $courseFilterId" : '') . " GROUP BY s.id HAVING (SUM(a.status = 'absent') + SUM(a.status = 'late')) > 0 ORDER BY (SUM(a.status = 'absent') * 2 + SUM(a.status = 'late')) DESC LIMIT 10";
+$atRiskSql = "SELECT s.id, s.first_name, s.last_name, s.student_id, c.code AS course_code, sec.room_name, SUM(a.status = 'absent') AS absents, SUM(a.status = 'late') AS lates, COUNT(a.id) AS total FROM attendance a JOIN students s ON a.student_id = s.id LEFT JOIN courses c ON s.course_id = c.id LEFT JOIN rooms sec ON s.room_id = sec.id" . analyticsFilterClause('a.course_id', $courseFilterId, 'a.date', $rangeFrom, $rangeTo, $mysqli) . " GROUP BY s.id HAVING (SUM(a.status = 'absent') + SUM(a.status = 'late')) > 0 ORDER BY (SUM(a.status = 'absent') * 2 + SUM(a.status = 'late')) DESC LIMIT 10";
 $atRiskResult = $mysqli->query($atRiskSql);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'export_at_risk_pdf') {
@@ -210,7 +275,7 @@ require_once __DIR__ . '/../includes/admin_header.php';
 
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-4 mb-3">
     <h4 class="mb-0">Analytics</h4>
-    <form method="get" class="d-flex align-items-center gap-2 mb-0">
+    <form method="get" class="d-flex align-items-center flex-wrap gap-2 mb-0" id="analyticsFilterForm">
         <label class="small text-muted mb-0" for="analyticsCourseFilter">Program:</label>
         <select class="form-select form-select-sm sp-filter-select" name="course_id" id="analyticsCourseFilter" onchange="this.form.submit()" style="width:auto;">
             <option value="0">All Programs</option>
@@ -218,6 +283,22 @@ require_once __DIR__ . '/../includes/admin_header.php';
                 <option value="<?php echo $courseOpt['id']; ?>" <?php echo $courseFilterId === (int) $courseOpt['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($courseOpt['code']); ?></option>
             <?php endforeach; ?>
         </select>
+        <label class="small text-muted mb-0 ms-1" for="analyticsRangeFilter">Range:</label>
+        <select class="form-select form-select-sm sp-filter-select" name="range" id="analyticsRangeFilter" style="width:auto;">
+            <option value="">All Time</option>
+            <option value="this_week" <?php echo $rangeFilter === 'this_week' ? 'selected' : ''; ?>>This Week</option>
+            <option value="this_month" <?php echo $rangeFilter === 'this_month' ? 'selected' : ''; ?>>This Month</option>
+            <option value="last_month" <?php echo $rangeFilter === 'last_month' ? 'selected' : ''; ?>>Last Month</option>
+            <option value="this_year" <?php echo $rangeFilter === 'this_year' ? 'selected' : ''; ?>>This Year</option>
+            <option value="school_year" <?php echo $rangeFilter === 'school_year' ? 'selected' : ''; ?>>School Year (<?php echo htmlspecialchars($schoolYear); ?>)</option>
+            <option value="custom" <?php echo $rangeFilter === 'custom' ? 'selected' : ''; ?>>Specific Date Range...</option>
+        </select>
+        <span class="d-flex align-items-center gap-2" id="analyticsCustomRangeFields" style="<?php echo $rangeFilter === 'custom' ? '' : 'display:none;'; ?>">
+            <input type="date" class="form-control form-control-sm" name="date_from" value="<?php echo htmlspecialchars($customFromInput); ?>" style="width:auto;">
+            <span class="text-muted small">to</span>
+            <input type="date" class="form-control form-control-sm" name="date_to" value="<?php echo htmlspecialchars($customToInput); ?>" style="width:auto;">
+            <button type="submit" class="btn btn-sm btn-primary">Apply</button>
+        </span>
     </form>
 </div>
 <div class="row g-3">
@@ -335,6 +416,9 @@ require_once __DIR__ . '/../includes/admin_header.php';
                         <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
                         <input type="hidden" name="action" value="export_at_risk_pdf">
                         <input type="hidden" name="course_id" value="<?php echo $courseFilterId; ?>">
+                        <input type="hidden" name="range" value="<?php echo htmlspecialchars($rangeFilter); ?>">
+                        <input type="hidden" name="date_from" value="<?php echo htmlspecialchars($customFromInput); ?>">
+                        <input type="hidden" name="date_to" value="<?php echo htmlspecialchars($customToInput); ?>">
                         <button type="submit" class="btn btn-sm sp-export-btn" title="Export as PDF"><i class="fa-solid fa-file-pdf"></i></button>
                     </form>
                 <?php endif; ?>
@@ -492,6 +576,19 @@ require_once __DIR__ . '/../includes/admin_header.php';
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+    var analyticsRangeFilter = document.getElementById('analyticsRangeFilter');
+    var analyticsCustomRangeFields = document.getElementById('analyticsCustomRangeFields');
+    if (analyticsRangeFilter) {
+        analyticsRangeFilter.addEventListener('change', function () {
+            if (this.value === 'custom') {
+                analyticsCustomRangeFields.style.display = 'flex';
+            } else {
+                analyticsCustomRangeFields.style.display = 'none';
+                this.form.submit();
+            }
+        });
+    }
+
     function greenShade(t) {
         // Light green (low value) fading up to a deep green (high value). t is 0-1.
         var light = [199, 230, 209];
