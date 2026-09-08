@@ -274,7 +274,8 @@ function badgeStatus($status) {
         'excused' => 'info',
         'reminder' => 'info',
         'summary' => 'primary',
-        'assignment' => 'success'
+        'assignment' => 'success',
+        'enrolled' => 'primary'
     ];
     $class = isset($classes[$status]) ? $classes[$status] : 'secondary';
     return '<span class="badge status-badge bg-' . $class . '">' . ucfirst($status) . '</span>';
@@ -839,6 +840,26 @@ function findStudentByCode($mysqli, $code) {
     return $row ?: null;
 }
 
+// A student can view a subject if it's in their home room, or if they were individually
+// enrolled into it (e.g. via a join code or a teacher's Enroll Student action) even
+// though it belongs to a different room. Use this instead of a raw room_id compare on
+// every student-facing subject page, or cross-enrolled students hit "Subject not found".
+function studentCanAccessSubject($mysqli, $studentDbId, $subject, $studentRoomId) {
+    if (!$subject) {
+        return false;
+    }
+    if ((int) $subject['room_id'] === (int) $studentRoomId) {
+        return true;
+    }
+    $check = $mysqli->prepare('SELECT id FROM enrollments WHERE student_id = ? AND subject_id = ? LIMIT 1');
+    $check->bind_param('ii', $studentDbId, $subject['id']);
+    $check->execute();
+    $check->store_result();
+    $has = $check->num_rows > 0;
+    $check->close();
+    return $has;
+}
+
 // Enrolling always scopes to this one subject via `enrollments` — it never touches the
 // student's room_id, so being enrolled in one class never makes them appear in every
 // other subject that happens to share the same room. A room_id match (home room) is
@@ -892,7 +913,7 @@ function unenrollStudentFromRoom($mysqli, $studentDbId, $allowedRoomIds) {
 }
 
 // Removes a student's individual `enrollments` link to one class (added via
-// enrollStudentInRoom's cross-room path), without touching their home room.
+// enrollStudentInRoom), without touching their home room.
 function removeClassEnrollment($mysqli, $studentDbId, $subjectId) {
     $stmt = $mysqli->prepare('DELETE FROM enrollments WHERE student_id = ? AND subject_id = ?');
     $stmt->bind_param('ii', $studentDbId, $subjectId);
@@ -1009,6 +1030,7 @@ function renderSubjectPageHeader($subject, $activeTab) {
         <a href="subject-details.php?id=<?php echo $subject['id']; ?>" class="<?php echo $activeTab === 'overview' ? 'active' : ''; ?>"><i class="fa-solid fa-chart-simple"></i> Overview</a>
         <a href="attendance.php?subject_id=<?php echo $subject['id']; ?>" class="<?php echo $activeTab === 'attendance' ? 'active' : ''; ?>"><i class="fa-solid fa-clock-rotate-left"></i> Attendance History</a>
         <a href="subject-announcements.php?id=<?php echo $subject['id']; ?>" class="<?php echo $activeTab === 'announcements' ? 'active' : ''; ?>"><i class="fa-solid fa-comment-dots"></i> Announcements</a>
+        <a href="subject-classmates.php?id=<?php echo $subject['id']; ?>" class="<?php echo $activeTab === 'classmates' ? 'active' : ''; ?>"><i class="fa-solid fa-user-group"></i> Classmates</a>
     </div>
     <?php
 }

@@ -76,6 +76,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $targetRoomId = $displayRooms[0];
         $result = enrollStudentInRoom($mysqli, $sid, $targetRoomId, $filterSubjectId);
         if ($result === 'success') {
+            $notifMessage = "You've been added to " . $filterSubjectName . '.';
+            $notifStmt = $mysqli->prepare("INSERT INTO notifications (student_id, subject_id, type, title, message, is_read, created_at) VALUES (?, ?, 'enrolled', 'Enrolled in a class', ?, 0, NOW())");
+            $notifStmt->bind_param('iis', $sid, $filterSubjectId, $notifMessage);
+            $notifStmt->execute();
+            $notifStmt->close();
             flash('Student enrolled in this class.', 'success');
         } elseif ($result === 'already_enrolled') {
             flash('That student is already enrolled in this class.', 'info');

@@ -21,7 +21,7 @@ $stmt->execute();
 $subject = $stmt->get_result()->fetch_assoc();
 $stmt->close();
 
-if (!$subject || (int) $subject['room_id'] !== (int) $me['room_id']) {
+if (!studentCanAccessSubject($mysqli, $studentDbId, $subject, $me['room_id'])) {
     flash('Subject not found.', 'danger');
     redirect('subjects.php');
 }

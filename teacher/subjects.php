@@ -49,6 +49,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $groupStmt->close();
 
+        // A day dropped from the schedule below gets its row deleted; enrollments
+        // cascade-delete on that FK, so pick a row that survives the edit and
+        // migrate individually-enrolled students (and attendance history) onto it
+        // first instead of letting them silently disappear.
+        $survivingRowId = null;
+        foreach ($selectedDays as $day) {
+            if (isset($existingByDay[$day])) {
+                $survivingRowId = $existingByDay[$day];
+                break;
+            }
+        }
+
         foreach ($selectedDays as $day) {
             if (isset($existingByDay[$day])) {
                 $rowId = $existingByDay[$day];
@@ -60,12 +72,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $ins = $mysqli->prepare('INSERT INTO subjects (code, name, teacher_id, room_id, day_of_week, start_time, end_time, subject_room, credit_units, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
                 $ins->bind_param('ssiissssis', $ref['code'], $ref['name'], $teacherId, $ref['room_id'], $day, $startTime, $endTime, $ref['subject_room'], $ref['credit_units'], $ref['status']);
                 $ins->execute();
+                $newRowId = $mysqli->insert_id;
                 $ins->close();
+                if ($survivingRowId === null) {
+                    $survivingRowId = $newRowId;
+                }
             }
         }
 
         foreach ($existingByDay as $day => $rowId) {
             if (!in_array($day, $selectedDays, true)) {
+                if ($survivingRowId !== null) {
+                    $moveEnroll = $mysqli->prepare('UPDATE IGNORE enrollments SET subject_id = ? WHERE subject_id = ?');
+                    $moveEnroll->bind_param('ii', $survivingRowId, $rowId);
+                    $moveEnroll->execute();
+                    $moveEnroll->close();
+
+                    $moveAttendance = $mysqli->prepare('UPDATE IGNORE attendance SET subject_id = ? WHERE subject_id = ?');
+                    $moveAttendance->bind_param('ii', $survivingRowId, $rowId);
+                    $moveAttendance->execute();
+                    $moveAttendance->close();
+                }
                 $del = $mysqli->prepare('DELETE FROM subjects WHERE id = ? AND teacher_id = ?');
                 $del->bind_param('ii', $rowId, $teacherId);
                 $del->execute();

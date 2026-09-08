@@ -1984,3 +1984,13 @@ td.sp-status-excused {
     color: var(--lp-mid-green);
 }
 
+.sp-classmate-card {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    padding: 0.85rem 1rem;
+    border: 1px solid #eef1ef;
+    border-radius: 1rem;
+    height: 100%;
+}
+
