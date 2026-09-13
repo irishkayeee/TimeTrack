@@ -24,6 +24,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $importantNoteParam = $importantNote ?: null;
         $status = sanitize($_POST['status'] ?? 'active');
         $teacherIdParam = $teacherId ?: null;
+
+        $previousTeacherId = null;
+        $previousDay = null;
+        $previousStartTime = null;
+        $previousEndTime = null;
+        if ($id) {
+            $prevStmt = $mysqli->prepare('SELECT teacher_id, day_of_week, start_time, end_time FROM subjects WHERE id = ?');
+            $prevStmt->bind_param('i', $id);
+            $prevStmt->execute();
+            $prevStmt->bind_result($previousTeacherId, $previousDay, $previousStartTime, $previousEndTime);
+            $prevStmt->fetch();
+            $prevStmt->close();
+        }
+        $isNewTeacherAssignment = $teacherIdParam && (int) $previousTeacherId !== (int) $teacherIdParam;
+        $isScheduleChange = $id && !$isNewTeacherAssignment && (
+            $previousDay !== $dayOfWeek ||
+            substr((string) $previousStartTime, 0, 5) !== substr($startTime, 0, 5) ||
+            substr((string) $previousEndTime, 0, 5) !== substr((string) $endTimeParam, 0, 5)
+        );
+
         if ($id) {
             $stmt = $mysqli->prepare('UPDATE subjects SET code = ?, name = ?, teacher_id = ?, room_id = ?, day_of_week = ?, start_time = ?, end_time = ?, subject_room = ?, credit_units = ?, important_note = ?, status = ? WHERE id = ?');
             $stmt->bind_param('ssiissssissi', $code, $name, $teacherIdParam, $roomId, $dayOfWeek, $startTime, $endTimeParam, $subjectRoom, $creditUnits, $importantNoteParam, $status, $id);
@@ -37,6 +57,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->close();
             flash('Subject created.', 'success');
         }
+
+        if ($isNewTeacherAssignment) {
+            notifyTeacherOfSubjectAssignment($mysqli, $teacherIdParam, $code, $name, [$dayOfWeek], $startTime);
+        } elseif ($teacherIdParam && $isScheduleChange) {
+            notifyTeacherOfScheduleChange($mysqli, $teacherIdParam, $code, $name, [$dayOfWeek], $startTime, $endTimeParam);
+        }
+
         redirect('subjects.php');
     }
     if ($_POST['action'] === 'delete_subject' && !empty($_POST['subject_id'])) {

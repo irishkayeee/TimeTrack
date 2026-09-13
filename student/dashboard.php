@@ -14,7 +14,6 @@ $stmt = $mysqli->prepare('SELECT s.first_name, s.room_id, c.code AS course_code,
 $stmt->bind_param('i', $studentDbId);
 $stmt->execute();
 $me = $stmt->get_result()->fetch_assoc();
-$roomId = $me['room_id'];
 $stmt->close();
 
 $hour = (int) date('G');
@@ -33,58 +32,54 @@ while ($row = $monthsResult->fetch_assoc()) {
 }
 $monthsStmt->close();
 
-// Attendance by Subject (bar chart) — every active subject in the student's
-// room, defaulting to 0% when there is no attendance history yet.
+// Attendance by Subject (bar chart) — every active subject the student is explicitly
+// enrolled in, defaulting to 0% when there is no attendance history yet.
 $subjectRates = [];
-if ($roomId) {
-    $stmt = $mysqli->prepare("SELECT id, code, name FROM subjects WHERE room_id = ? AND status = 'active' ORDER BY name");
-    $stmt->bind_param('i', $roomId);
-    $stmt->execute();
-    $subjectsResult = $stmt->get_result();
-    while ($subjectRow = $subjectsResult->fetch_assoc()) {
-        $countStmt = $mysqli->prepare("SELECT COUNT(*) AS total, SUM(status IN ('present','late')) AS attended FROM attendance WHERE student_id = ? AND subject_id = ?");
-        $countStmt->bind_param('ii', $studentDbId, $subjectRow['id']);
-        $countStmt->execute();
-        $counts = $countStmt->get_result()->fetch_assoc();
-        $countStmt->close();
-        $total = (int) $counts['total'];
-        $rate = $total ? round((((int) $counts['attended']) / $total) * 100) : 0;
-        $subjectRates[] = ['id' => (int) $subjectRow['id'], 'code' => $subjectRow['code'], 'name' => $subjectRow['name'], 'rate' => $rate];
-    }
-    $stmt->close();
+$stmt = $mysqli->prepare("SELECT sub.id, sub.code, sub.name FROM subjects sub JOIN enrollments e ON e.subject_id = sub.id AND e.student_id = ? WHERE sub.status = 'active' ORDER BY sub.name");
+$stmt->bind_param('i', $studentDbId);
+$stmt->execute();
+$subjectsResult = $stmt->get_result();
+while ($subjectRow = $subjectsResult->fetch_assoc()) {
+    $countStmt = $mysqli->prepare("SELECT COUNT(*) AS total, SUM(status IN ('present','late')) AS attended FROM attendance WHERE student_id = ? AND subject_id = ?");
+    $countStmt->bind_param('ii', $studentDbId, $subjectRow['id']);
+    $countStmt->execute();
+    $counts = $countStmt->get_result()->fetch_assoc();
+    $countStmt->close();
+    $total = (int) $counts['total'];
+    $rate = $total ? round((((int) $counts['attended']) / $total) * 100) : 0;
+    $subjectRates[] = ['id' => (int) $subjectRow['id'], 'code' => $subjectRow['code'], 'name' => $subjectRow['name'], 'rate' => $rate];
 }
+$stmt->close();
 
-// Today's Classes — this student's room's schedule for today, with live status.
+// Today's Classes — this student's enrolled subjects scheduled for today, with live status.
 $dayMap = ['Mon' => 1, 'Tue' => 2, 'Wed' => 3, 'Thu' => 4, 'Fri' => 5, 'Sat' => 6, 'Sun' => 7];
 $todayCode = array_search((int) date('N'), $dayMap);
 $todayClasses = [];
-if ($roomId) {
-    $stmt = $mysqli->prepare("SELECT sub.*, CONCAT(t.first_name, ' ', t.last_name) AS teacher_name FROM subjects sub LEFT JOIN teachers t ON sub.teacher_id = t.id WHERE sub.room_id = ? AND sub.day_of_week = ? AND sub.status = 'active' ORDER BY sub.start_time");
-    $stmt->bind_param('is', $roomId, $todayCode);
-    $stmt->execute();
-    $todayResult = $stmt->get_result();
-    while ($row = $todayResult->fetch_assoc()) {
-        $attStmt = $mysqli->prepare("SELECT status, time FROM attendance WHERE student_id = ? AND subject_id = ? AND date = CURDATE() LIMIT 1");
-        $attStmt->bind_param('ii', $studentDbId, $row['id']);
-        $attStmt->execute();
-        $att = $attStmt->get_result()->fetch_assoc();
-        $attStmt->close();
-        if ($att) {
-            $row['display_status'] = $att['status'];
+$stmt = $mysqli->prepare("SELECT sub.*, CONCAT(t.first_name, ' ', t.last_name) AS teacher_name FROM subjects sub LEFT JOIN teachers t ON sub.teacher_id = t.id JOIN enrollments e ON e.subject_id = sub.id AND e.student_id = ? WHERE sub.day_of_week = ? AND sub.status = 'active' ORDER BY sub.start_time");
+$stmt->bind_param('is', $studentDbId, $todayCode);
+$stmt->execute();
+$todayResult = $stmt->get_result();
+while ($row = $todayResult->fetch_assoc()) {
+    $attStmt = $mysqli->prepare("SELECT status, time FROM attendance WHERE student_id = ? AND subject_id = ? AND date = CURDATE() LIMIT 1");
+    $attStmt->bind_param('ii', $studentDbId, $row['id']);
+    $attStmt->execute();
+    $att = $attStmt->get_result()->fetch_assoc();
+    $attStmt->close();
+    if ($att) {
+        $row['display_status'] = $att['status'];
+    } else {
+        $minutesSinceStart = (strtotime(date('H:i:s')) - strtotime($row['start_time'])) / 60;
+        if ($minutesSinceStart < 0) {
+            $row['display_status'] = 'upcoming';
+        } elseif ($minutesSinceStart < effectiveAbsentCutoff($row)) {
+            $row['display_status'] = 'ongoing';
         } else {
-            $minutesSinceStart = (strtotime(date('H:i:s')) - strtotime($row['start_time'])) / 60;
-            if ($minutesSinceStart < 0) {
-                $row['display_status'] = 'upcoming';
-            } elseif ($minutesSinceStart < effectiveAbsentCutoff($row)) {
-                $row['display_status'] = 'ongoing';
-            } else {
-                $row['display_status'] = 'absent';
-            }
+            $row['display_status'] = 'absent';
         }
-        $todayClasses[] = $row;
     }
-    $stmt->close();
+    $todayClasses[] = $row;
 }
+$stmt->close();
 
 // Recent Attendance — last 5 records across all subjects, with remarks.
 $recentStmt = $mysqli->prepare('SELECT a.*, sub.name AS subject_name, sub.start_time AS subject_start_time FROM attendance a LEFT JOIN subjects sub ON a.subject_id = sub.id WHERE a.student_id = ? ORDER BY a.date DESC, a.time DESC LIMIT 5');

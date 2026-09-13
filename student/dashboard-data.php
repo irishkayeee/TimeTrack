@@ -14,42 +14,35 @@ $subjectId = intval($_GET['subject_id'] ?? 0);
 $month = sanitize($_GET['month'] ?? 'all');
 $monthFilter = ($month !== 'all' && preg_match('/^\d{4}-\d{2}$/', $month)) ? $month : null;
 
-$stmt = $mysqli->prepare('SELECT room_id FROM students WHERE id = ?');
-$stmt->bind_param('i', $studentDbId);
-$stmt->execute();
-$stmt->bind_result($roomId);
-$stmt->fetch();
-$stmt->close();
-
 if ($type === 'subjects') {
     $result = ['labels' => [], 'data' => [], 'subjectIds' => []];
-    if ($roomId) {
-        $stmt = $mysqli->prepare("SELECT id, code FROM subjects WHERE room_id = ? AND status = 'active' ORDER BY name");
-        $stmt->bind_param('i', $roomId);
-        $stmt->execute();
-        $subjectsResult = $stmt->get_result();
-        while ($subjectRow = $subjectsResult->fetch_assoc()) {
-            $query = "SELECT COUNT(*) AS total, SUM(status IN ('present','late')) AS attended FROM attendance WHERE student_id = ? AND subject_id = ?";
-            $types = 'ii';
-            $params = [$studentDbId, $subjectRow['id']];
-            if ($monthFilter) {
-                $query .= " AND DATE_FORMAT(date, '%Y-%m') = ?";
-                $types .= 's';
-                $params[] = $monthFilter;
-            }
-            $countStmt = $mysqli->prepare($query);
-            $countStmt->bind_param($types, ...$params);
-            $countStmt->execute();
-            $counts = $countStmt->get_result()->fetch_assoc();
-            $countStmt->close();
-            $total = (int) $counts['total'];
-            $rate = $total ? round((((int) $counts['attended']) / $total) * 100) : 0;
-            $result['labels'][] = $subjectRow['code'];
-            $result['data'][] = $rate;
-            $result['subjectIds'][] = (int) $subjectRow['id'];
+    // Only the student's explicitly enrolled subjects — room/section membership
+    // alone no longer grants a spot in this breakdown.
+    $stmt = $mysqli->prepare("SELECT sub.id, sub.code FROM subjects sub JOIN enrollments e ON e.subject_id = sub.id AND e.student_id = ? WHERE sub.status = 'active' ORDER BY sub.name");
+    $stmt->bind_param('i', $studentDbId);
+    $stmt->execute();
+    $subjectsResult = $stmt->get_result();
+    while ($subjectRow = $subjectsResult->fetch_assoc()) {
+        $query = "SELECT COUNT(*) AS total, SUM(status IN ('present','late')) AS attended FROM attendance WHERE student_id = ? AND subject_id = ?";
+        $types = 'ii';
+        $params = [$studentDbId, $subjectRow['id']];
+        if ($monthFilter) {
+            $query .= " AND DATE_FORMAT(date, '%Y-%m') = ?";
+            $types .= 's';
+            $params[] = $monthFilter;
         }
-        $stmt->close();
+        $countStmt = $mysqli->prepare($query);
+        $countStmt->bind_param($types, ...$params);
+        $countStmt->execute();
+        $counts = $countStmt->get_result()->fetch_assoc();
+        $countStmt->close();
+        $total = (int) $counts['total'];
+        $rate = $total ? round((((int) $counts['attended']) / $total) * 100) : 0;
+        $result['labels'][] = $subjectRow['code'];
+        $result['data'][] = $rate;
+        $result['subjectIds'][] = (int) $subjectRow['id'];
     }
+    $stmt->close();
     echo json_encode($result);
     exit;
 }

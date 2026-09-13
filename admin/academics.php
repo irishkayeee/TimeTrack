@@ -314,10 +314,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $prevStmt->close();
         }
         $isNewTeacherAssignment = $teacherIdParam && (int) $previousTeacherId !== (int) $teacherIdParam;
+        // Compare only HH:MM: the DB stores TIME as HH:MM:SS but the <input type="time">
+        // form field submits HH:MM, so a straight string compare always looked "changed".
         $isScheduleChange = $id && !$isNewTeacherAssignment && (
             $previousDay !== $days[0] ||
-            $previousStartTime !== $startTime ||
-            (string) $previousEndTime !== (string) $endTimeParam
+            substr((string) $previousStartTime, 0, 5) !== substr($startTime, 0, 5) ||
+            substr((string) $previousEndTime, 0, 5) !== substr((string) $endTimeParam, 0, 5)
         );
 
         if ($id) {

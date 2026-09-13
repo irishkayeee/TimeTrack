@@ -275,10 +275,13 @@ function badgeStatus($status) {
         'reminder' => 'info',
         'summary' => 'primary',
         'assignment' => 'success',
-        'enrolled' => 'primary'
+        'enrolled' => 'primary',
+        'unenrolled' => 'secondary',
+        'schedule_update' => 'info'
     ];
     $class = isset($classes[$status]) ? $classes[$status] : 'secondary';
-    return '<span class="badge status-badge bg-' . $class . '">' . ucfirst($status) . '</span>';
+    $label = ucwords(str_replace('_', ' ', $status));
+    return '<span class="badge status-badge bg-' . $class . '">' . $label . '</span>';
 }
 
 function logActivity($userId, $action) {
@@ -852,16 +855,12 @@ function findStudentByCode($mysqli, $code) {
     return $row ?: null;
 }
 
-// A student can view a subject if it's in their home room, or if they were individually
-// enrolled into it (e.g. via a join code or a teacher's Enroll Student action) even
-// though it belongs to a different room. Use this instead of a raw room_id compare on
-// every student-facing subject page, or cross-enrolled students hit "Subject not found".
+// A student can view a subject only if they were explicitly enrolled into it (via a
+// join code or a teacher's Enroll Student action) — sharing a room/section with the
+// subject no longer grants access on its own; room_id is just the student's home label.
 function studentCanAccessSubject($mysqli, $studentDbId, $subject, $studentRoomId) {
     if (!$subject) {
         return false;
-    }
-    if ((int) $subject['room_id'] === (int) $studentRoomId) {
-        return true;
     }
     $check = $mysqli->prepare('SELECT id FROM enrollments WHERE student_id = ? AND subject_id = ? LIMIT 1');
     $check->bind_param('ii', $studentDbId, $subject['id']);
@@ -874,21 +873,17 @@ function studentCanAccessSubject($mysqli, $studentDbId, $subject, $studentRoomId
 
 // Enrolling always scopes to this one subject via `enrollments` — it never touches the
 // student's room_id, so being enrolled in one class never makes them appear in every
-// other subject that happens to share the same room. A room_id match (home room) is
-// still honored as "already enrolled" since the roster/attendance queries also check it.
+// other subject that happens to share the same room. Room membership no longer implies
+// enrollment on its own, so $targetRoomId isn't checked here — only enrollments is.
 function enrollStudentInRoom($mysqli, $studentDbId, $targetRoomId, $subjectId) {
-    $currentRoomId = null;
-    $stmt = $mysqli->prepare('SELECT room_id FROM students WHERE id = ?');
-    $stmt->bind_param('i', $studentDbId);
-    $stmt->execute();
-    $stmt->bind_result($currentRoomId);
-    $found = $stmt->fetch();
-    $stmt->close();
+    $exists = $mysqli->prepare('SELECT id FROM students WHERE id = ?');
+    $exists->bind_param('i', $studentDbId);
+    $exists->execute();
+    $exists->store_result();
+    $found = $exists->num_rows > 0;
+    $exists->close();
     if (!$found) {
         return 'not_found';
-    }
-    if ($currentRoomId !== null && (int) $currentRoomId === (int) $targetRoomId) {
-        return 'already_enrolled';
     }
     $check = $mysqli->prepare('SELECT id FROM enrollments WHERE student_id = ? AND subject_id = ? LIMIT 1');
     $check->bind_param('ii', $studentDbId, $subjectId);
@@ -904,24 +899,6 @@ function enrollStudentInRoom($mysqli, $studentDbId, $targetRoomId, $subjectId) {
     $insert->execute();
     $insert->close();
     return 'success';
-}
-
-function unenrollStudentFromRoom($mysqli, $studentDbId, $allowedRoomIds) {
-    $existingRoomId = null;
-    $check = $mysqli->prepare('SELECT room_id FROM students WHERE id = ?');
-    $check->bind_param('i', $studentDbId);
-    $check->execute();
-    $check->bind_result($existingRoomId);
-    $found = $check->fetch();
-    $check->close();
-    if (!$found || !in_array($existingRoomId, $allowedRoomIds)) {
-        return false;
-    }
-    $stmt = $mysqli->prepare('UPDATE students SET room_id = NULL WHERE id = ?');
-    $stmt->bind_param('i', $studentDbId);
-    $stmt->execute();
-    $stmt->close();
-    return true;
 }
 
 // Removes a student's individual `enrollments` link to one class (added via

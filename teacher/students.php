@@ -91,12 +91,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($_POST['action'] === 'unenroll_student' && !empty($_POST['student_id'])) {
         $sid = intval($_POST['student_id']);
-        if (unenrollStudentFromRoom($mysqli, $sid, $allowedRooms)) {
-            flash('Student unenrolled from this room. Their account was kept.', 'success');
-        } elseif ($filterSubjectId && removeClassEnrollment($mysqli, $sid, $filterSubjectId)) {
-            flash('Student removed from this class. Their home room was not affected.', 'success');
+        // Unenrolling only ever removes this one class's enrollment now — a room/section
+        // is just a student's home label and no longer grants access on its own, so
+        // there's nothing room-wide left to clear here.
+        if ($filterSubjectId && removeClassEnrollment($mysqli, $sid, $filterSubjectId)) {
+            $notifMessage = "You've been removed from " . $filterSubjectName . '.';
+            $notifStmt = $mysqli->prepare("INSERT INTO notifications (student_id, subject_id, type, title, message, is_read, created_at) VALUES (?, ?, 'unenrolled', 'Removed from a class', ?, 0, NOW())");
+            $notifStmt->bind_param('iis', $sid, $filterSubjectId, $notifMessage);
+            $notifStmt->execute();
+            $notifStmt->close();
+            flash('Student removed from this class.', 'success');
         } else {
-            flash('You can only manage students in your own rooms.', 'danger');
+            flash('You can only manage students in your own classes.', 'danger');
         }
         redirect($redirectTarget);
     }
@@ -134,19 +140,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $newCredentials = flashCredentialsMessage();
 $studentRows = [];
-if ($displayRooms) {
-    $placeholders = implode(',', array_fill(0, count($displayRooms), '?'));
-    $types = str_repeat('i', count($displayRooms));
-    $params = $displayRooms;
-    $sql = "SELECT s.*, c.code AS course_code, sec.room_name FROM students s LEFT JOIN courses c ON s.course_id = c.id LEFT JOIN rooms sec ON s.room_id = sec.id WHERE s.room_id IN ($placeholders)";
-    if ($filterSubjectId) {
-        $sql .= ' OR s.id IN (SELECT student_id FROM enrollments WHERE subject_id = ?)';
-        $types .= 'i';
-        $params[] = $filterSubjectId;
-    }
-    $sql .= ' ORDER BY s.created_at DESC';
+if ($displayRooms && $filterSubjectId) {
+    // A class's roster is exactly who was explicitly enrolled into THIS subject —
+    // being a member of the same room/section no longer grants automatic visibility,
+    // so a freshly created class starts empty until the teacher enrolls someone.
+    $sql = "SELECT s.*, c.code AS course_code, sec.room_name FROM students s LEFT JOIN courses c ON s.course_id = c.id LEFT JOIN rooms sec ON s.room_id = sec.id WHERE s.id IN (SELECT student_id FROM enrollments WHERE subject_id = ?) ORDER BY s.created_at DESC";
     $stmt = $mysqli->prepare($sql);
-    $stmt->bind_param($types, ...$params);
+    $stmt->bind_param('i', $filterSubjectId);
     $stmt->execute();
     $result = $stmt->get_result();
     while ($row = $result->fetch_assoc()) {
@@ -366,7 +366,7 @@ require_once __DIR__ . '/../includes/teacher_header.php';
             <div class="modal-body text-center py-4">
                 <div class="sp-unenroll-icon mb-3"><i class="fa-solid fa-user-slash"></i></div>
                 <h5 class="mb-2">Unenroll this student?</h5>
-                <p class="text-muted mb-0">This will remove <strong id="unenrollStudentName"></strong> from this room/class. Their student account and records are kept — an admin can re-assign them to a room later.</p>
+                <p class="text-muted mb-0">This will remove <strong id="unenrollStudentName"></strong> from this class only. Their student account and other classes are kept.</p>
             </div>
             <div class="modal-footer justify-content-center border-0 pb-4">
                 <button type="button" class="btn btn-secondary px-4" data-bs-dismiss="modal">Cancel</button>
@@ -492,7 +492,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             let noteHtml = '';
             if (data.room_id && data.room_name) {
-                noteHtml = '<div class="text-muted small mt-2"><i class="fa-solid fa-circle-info me-1"></i> Also enrolled in ' + escapeHtml(data.room_name) + '. Adding them here keeps that enrollment and adds this class too.</div>';
+                noteHtml = '<div class="text-muted small mt-2"><i class="fa-solid fa-circle-info me-1"></i> Home section: ' + escapeHtml(data.room_name) + '. Enrolling them here only adds this one class.</div>';
             }
             enrollLookupResult.innerHTML = '<div class="border rounded-3 p-3 d-flex align-items-center gap-3">'
                 + '<i class="fa-solid fa-circle-user fa-2x text-secondary"></i>'

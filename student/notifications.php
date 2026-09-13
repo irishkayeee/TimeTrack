@@ -16,7 +16,7 @@ $stmt->execute();
 $notifications = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 $stmt->close();
 
-$notifIcons = ['present' => 'fa-circle-check', 'late' => 'fa-clock', 'absent' => 'fa-triangle-exclamation', 'enrolled' => 'fa-user-plus'];
+$notifIcons = ['present' => 'fa-circle-check', 'late' => 'fa-clock', 'absent' => 'fa-triangle-exclamation', 'enrolled' => 'fa-user-plus', 'unenrolled' => 'fa-user-minus'];
 
 $notifSubjects = [];
 foreach ($notifications as $n) {
@@ -85,6 +85,7 @@ require_once __DIR__ . '/../includes/student_header.php';
         notifCards.forEach(function (card) {
             var matchesFilter = activeFilter === 'all'
                 || (activeFilter === 'unread' && card.getAttribute('data-unread') === '1')
+                || (activeFilter === 'enrolled' && (card.getAttribute('data-type') === 'enrolled' || card.getAttribute('data-type') === 'unenrolled'))
                 || card.getAttribute('data-type') === activeFilter;
             var matchesSubject = subject === 'all' || card.getAttribute('data-subject') === subject;
             var matches = matchesFilter && matchesSubject;

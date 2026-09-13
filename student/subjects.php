@@ -86,14 +86,15 @@ if ($roomId) {
 
 $activeSubjects = [];
 $inactiveSubjects = [];
-$roomIdParam = $roomId ?: 0;
+// Being in the same room/section as a subject no longer grants automatic visibility —
+// a class only shows up once a teacher (or a join code) has explicitly enrolled the
+// student into it via `enrollments`.
 $stmt = $mysqli->prepare("SELECT DISTINCT sub.*, CONCAT(t.first_name, ' ', t.last_name) AS teacher_name
     FROM subjects sub
     LEFT JOIN teachers t ON sub.teacher_id = t.id
-    LEFT JOIN enrollments e ON e.subject_id = sub.id AND e.student_id = ?
-    WHERE sub.room_id = ? OR e.id IS NOT NULL
+    JOIN enrollments e ON e.subject_id = sub.id AND e.student_id = ?
     ORDER BY sub.name");
-$stmt->bind_param('ii', $studentDbId, $roomIdParam);
+$stmt->bind_param('i', $studentDbId);
 $stmt->execute();
 $result = $stmt->get_result();
 while ($row = $result->fetch_assoc()) {

@@ -19,24 +19,20 @@ if (!$row) {
 $subjectId = intval($_GET['subject_id'] ?? 0);
 $alreadyInClass = false;
 if ($subjectId) {
-    $subjStmt = $mysqli->prepare('SELECT room_id FROM subjects WHERE id = ? AND teacher_id = ?');
+    $subjStmt = $mysqli->prepare('SELECT id FROM subjects WHERE id = ? AND teacher_id = ?');
     $subjStmt->bind_param('ii', $subjectId, $teacherId);
     $subjStmt->execute();
-    $subjStmt->bind_result($subjectRoomId);
-    $subjFound = $subjStmt->fetch();
+    $subjStmt->store_result();
+    $subjFound = $subjStmt->num_rows > 0;
     $subjStmt->close();
 
     if ($subjFound) {
-        if ($row['room_id'] !== null && (int) $row['room_id'] === (int) $subjectRoomId) {
-            $alreadyInClass = true;
-        } else {
-            $check = $mysqli->prepare('SELECT id FROM enrollments WHERE student_id = ? AND subject_id = ? LIMIT 1');
-            $check->bind_param('ii', $row['id'], $subjectId);
-            $check->execute();
-            $check->store_result();
-            $alreadyInClass = $check->num_rows > 0;
-            $check->close();
-        }
+        $check = $mysqli->prepare('SELECT id FROM enrollments WHERE student_id = ? AND subject_id = ? LIMIT 1');
+        $check->bind_param('ii', $row['id'], $subjectId);
+        $check->execute();
+        $check->store_result();
+        $alreadyInClass = $check->num_rows > 0;
+        $check->close();
     }
 }
 
