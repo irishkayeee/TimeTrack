@@ -124,6 +124,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $phone = sanitize($_POST['phone'] ?? '');
         $email = sanitize($_POST['email'] ?? '');
         $status = sanitize($_POST['status'] ?? 'active');
+
+        $dupCheck = $mysqli->prepare('SELECT id FROM teachers WHERE teacher_id = ? AND id != ? LIMIT 1');
+        $dupCheck->bind_param('si', $teacherId, $id);
+        $dupCheck->execute();
+        $dupCheck->store_result();
+        $isDuplicate = $dupCheck->num_rows > 0;
+        $dupCheck->close();
+        if ($isDuplicate) {
+            flash('That teacher ID is already in use.', 'danger');
+            redirect('academics.php?tab=teachers');
+        }
+
         if ($id) {
             $stmt = $mysqli->prepare('UPDATE teachers SET teacher_id = ?, first_name = ?, last_name = ?, subject = ?, room_id = ?, phone = ?, email = ?, status = ? WHERE id = ?');
             $stmt->bind_param('ssssisssi', $teacherId, $firstName, $lastName, $subject, $roomId, $phone, $email, $status, $id);

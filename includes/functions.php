@@ -595,7 +595,12 @@ function createUserAccountFor($mysqli, $role, $baseUsername, $email, &$plainPass
     $hash = password_hash($plainPassword, PASSWORD_DEFAULT);
     $stmt = $mysqli->prepare('INSERT INTO users (username, email, password_hash, role, status, created_at) VALUES (?, ?, ?, ?, "active", NOW())');
     $stmt->bind_param('ssss', $username, $email, $hash, $role);
-    if (!$stmt->execute()) {
+    // mysqli throws on a duplicate username/email (PHP 8.1+ default report mode)
+    // instead of returning false, so catch it here to keep this function's
+    // documented "false means try again" contract for callers.
+    try {
+        $stmt->execute();
+    } catch (mysqli_sql_exception $e) {
         $stmt->close();
         return false;
     }
