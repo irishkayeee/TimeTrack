@@ -277,7 +277,8 @@ function badgeStatus($status) {
         'assignment' => 'success',
         'enrolled' => 'primary',
         'unenrolled' => 'secondary',
-        'schedule_update' => 'info'
+        'schedule_update' => 'info',
+        'makeup_class' => 'warning'
     ];
     $class = isset($classes[$status]) ? $classes[$status] : 'secondary';
     $label = ucwords(str_replace('_', ' ', $status));
@@ -635,28 +636,120 @@ function flashCredentialsMessage() {
     return null;
 }
 
-function computeAttendanceStatus($startTime, $scanTime, $absentCutoff = null) {
-    $diffMinutes = (strtotime($scanTime) - strtotime($startTime)) / 60;
-    if ($diffMinutes <= 0) {
+// Present covers arriving on time; Late covers any scan from right after start_time
+// all the way through the end of the class session, plus a grace window past
+// end_time (absentCutoff minutes) — only scanning later than that counts as Absent.
+function computeAttendanceStatus($startTime, $endTime, $scanTime, $absentCutoff = null) {
+    $diffFromStart = (strtotime($scanTime) - strtotime($startTime)) / 60;
+    if ($diffFromStart <= 0) {
         return 'present';
     }
     $absentCutoff = $absentCutoff !== null ? intval($absentCutoff) : intval(getSetting('absent_cutoff_minutes', 20));
-    return $diffMinutes < $absentCutoff ? 'late' : 'absent';
+    $absentDeadline = strtotime($endTime ?: $startTime) + $absentCutoff * 60;
+    return strtotime($scanTime) < $absentDeadline ? 'late' : 'absent';
 }
 
-function virtualRosterStatus($startTime, $nowTime = null, $absentCutoff = null) {
+function virtualRosterStatus($startTime, $endTime, $nowTime = null, $absentCutoff = null) {
     $now = $nowTime ?: date('H:i:s');
-    $diffMinutes = (strtotime($now) - strtotime($startTime)) / 60;
-    if ($diffMinutes < 0) {
+    $diffFromStart = (strtotime($now) - strtotime($startTime)) / 60;
+    if ($diffFromStart < 0) {
         return 'pending';
     }
     $absentCutoff = $absentCutoff !== null ? intval($absentCutoff) : intval(getSetting('absent_cutoff_minutes', 20));
-    return $diffMinutes < $absentCutoff ? 'pending' : 'absent';
+    $absentDeadline = strtotime($endTime ?: $startTime) + $absentCutoff * 60;
+    return strtotime($now) < $absentDeadline ? 'pending' : 'absent';
+}
+
+// Once a class's start time plus its absent-cutoff window has passed for today, any
+// roster student with no attendance row yet truly never showed up — this persists
+// that as an 'absent' record instead of leaving them with no record at all, which
+// would otherwise make them silently disappear from attendance history/reports.
+function finalizeAbsencesForSubject($mysqli, $subject) {
+    $today = date('D');
+    $todayDate = date('Y-m-d');
+
+    $makeupStmt = $mysqli->prepare('SELECT start_time, end_time FROM makeup_sessions WHERE subject_id = ? AND session_date = CURDATE() LIMIT 1');
+    $makeupStmt->bind_param('i', $subject['id']);
+    $makeupStmt->execute();
+    $makeupStmt->bind_result($makeupStartTime, $makeupEndTime);
+    $hasMakeupToday = $makeupStmt->fetch();
+    $makeupStmt->close();
+
+    if ($hasMakeupToday) {
+        $effectiveStartTime = $makeupStartTime;
+        $effectiveEndTime = $makeupEndTime;
+    } elseif ($subject['day_of_week'] === $today) {
+        $effectiveStartTime = $subject['start_time'];
+        $effectiveEndTime = $subject['end_time'];
+    } else {
+        return;
+    }
+
+    $absentCutoff = $subject['absent_cutoff_minutes'] !== null ? intval($subject['absent_cutoff_minutes']) : intval(getSetting('absent_cutoff_minutes', 20));
+    $cutoffTs = strtotime($todayDate . ' ' . ($effectiveEndTime ?: $effectiveStartTime)) + $absentCutoff * 60;
+    if (time() < $cutoffTs) {
+        return;
+    }
+
+    $stmt = $mysqli->prepare('SELECT s.id, s.course_id, s.room_id, s.first_name, s.last_name, s.guardian_name, s.guardian_email
+        FROM students s
+        WHERE s.status = "active"
+          AND (s.room_id = ? OR s.id IN (SELECT student_id FROM enrollments WHERE subject_id = ?))
+          AND NOT EXISTS (SELECT 1 FROM attendance a WHERE a.student_id = s.id AND a.subject_id = ? AND a.date = CURDATE())');
+    $stmt->bind_param('iii', $subject['room_id'], $subject['id'], $subject['id']);
+    $stmt->execute();
+    $noShows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    $stmt->close();
+
+    if (!$noShows) {
+        return;
+    }
+
+    $subjNameStmt = $mysqli->prepare('SELECT name FROM subjects WHERE id = ? LIMIT 1');
+    $subjNameStmt->bind_param('i', $subject['id']);
+    $subjNameStmt->execute();
+    $subjNameStmt->bind_result($subjectName);
+    $subjNameStmt->fetch();
+    $subjNameStmt->close();
+
+    $nowTime = date('H:i:s');
+    foreach ($noShows as $student) {
+        $insert = $mysqli->prepare('INSERT INTO attendance (student_id, course_id, room_id, subject_id, status, scan_type, date, time, created_at) VALUES (?, ?, ?, ?, "absent", "absent", CURDATE(), ?, NOW())');
+        $insert->bind_param('iiiis', $student['id'], $student['course_id'], $student['room_id'], $subject['id'], $nowTime);
+        $insert->execute();
+        $insert->close();
+
+        notifyStudent($student['id'], 'absent', 'Marked Absent', 'You were marked absent in ' . $subjectName . ' today.', $subject['id']);
+        notifyGuardianOfAttendance($student, $subjectName, 'absent', $nowTime);
+    }
+}
+
+// Sweeps every subject with a session today (regular schedule or a makeup session)
+// through finalizeAbsencesForSubject, so attendance reports stay accurate even for
+// subjects nobody has opened a live roster/scanner for since the cutoff passed.
+function finalizeTodaysAbsences($mysqli) {
+    $today = date('D');
+    $stmt = $mysqli->prepare("SELECT id, room_id, start_time, end_time, day_of_week, absent_cutoff_minutes FROM subjects WHERE status = 'active' AND day_of_week = ?");
+    $stmt->bind_param('s', $today);
+    $stmt->execute();
+    $subjects = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    $stmt->close();
+    foreach ($subjects as $subject) {
+        finalizeAbsencesForSubject($mysqli, $subject);
+    }
+
+    $stmt = $mysqli->prepare("SELECT s.id, s.room_id, s.start_time, s.end_time, s.day_of_week, s.absent_cutoff_minutes FROM subjects s JOIN makeup_sessions m ON m.subject_id = s.id WHERE m.session_date = CURDATE() AND s.status = 'active'");
+    $stmt->execute();
+    $makeupSubjects = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    $stmt->close();
+    foreach ($makeupSubjects as $subject) {
+        finalizeAbsencesForSubject($mysqli, $subject);
+    }
 }
 
 function getLiveRosterForSubject($mysqli, $subjectId) {
     $emptyCounts = ['present' => 0, 'late' => 0, 'absent' => 0, 'pending' => 0];
-    $stmt = $mysqli->prepare('SELECT id, teacher_id, room_id, start_time, day_of_week, absent_cutoff_minutes FROM subjects WHERE id = ? LIMIT 1');
+    $stmt = $mysqli->prepare('SELECT id, teacher_id, room_id, start_time, end_time, day_of_week, absent_cutoff_minutes FROM subjects WHERE id = ? LIMIT 1');
     $stmt->bind_param('i', $subjectId);
     $stmt->execute();
     $subject = $stmt->get_result()->fetch_assoc();
@@ -664,6 +757,7 @@ function getLiveRosterForSubject($mysqli, $subjectId) {
     if (!$subject) {
         return ['subject' => null, 'rows' => [], 'counts' => $emptyCounts];
     }
+    finalizeAbsencesForSubject($mysqli, $subject);
     $query = 'SELECT s.id AS student_id, s.student_id AS student_code, s.first_name, s.last_name, s.photo,
                      a.status AS scanned_status, a.time AS scan_time
               FROM students s
@@ -677,7 +771,7 @@ function getLiveRosterForSubject($mysqli, $subjectId) {
     $rows = [];
     $counts = $emptyCounts;
     while ($row = $result->fetch_assoc()) {
-        $row['display_status'] = $row['scanned_status'] ?: virtualRosterStatus($subject['start_time'], null, $subject['absent_cutoff_minutes']);
+        $row['display_status'] = $row['scanned_status'] ?: virtualRosterStatus($subject['start_time'], $subject['end_time'], null, $subject['absent_cutoff_minutes']);
         $counts[$row['display_status']]++;
         $rows[] = $row;
     }

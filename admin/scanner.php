@@ -34,6 +34,24 @@ if ($subjectId) {
     $stmt->execute();
     $activeSubject = $stmt->get_result()->fetch_assoc();
     $stmt->close();
+
+    // If there's a makeup session for today, scan-attendance.php already scores
+    // against its time instead of the regular schedule — mirror that here so the
+    // header and "late by X minutes" display agree with what actually got saved.
+    if ($activeSubject) {
+        $activeSubject['is_makeup'] = false;
+        $makeupStmt = $mysqli->prepare('SELECT start_time, end_time, note FROM makeup_sessions WHERE subject_id = ? AND session_date = CURDATE() LIMIT 1');
+        $makeupStmt->bind_param('i', $subjectId);
+        $makeupStmt->execute();
+        $makeupRow = $makeupStmt->get_result()->fetch_assoc();
+        $makeupStmt->close();
+        if ($makeupRow) {
+            $activeSubject['start_time'] = $makeupRow['start_time'];
+            $activeSubject['end_time'] = $makeupRow['end_time'];
+            $activeSubject['is_makeup'] = true;
+            $activeSubject['makeup_note'] = $makeupRow['note'];
+        }
+    }
 }
 
 $scannedRows = [];
@@ -95,7 +113,10 @@ if ($isTeacherView) {
             <div class="d-flex gap-3">
                 <div class="sp-mc-icon-box" style="--mc-color: var(--lp-mid-green);"><i class="fa-solid fa-qrcode"></i></div>
                 <div>
-                    <p class="text-muted mb-2"><strong><?php echo htmlspecialchars($activeSubject['name']); ?></strong> &mdash; <?php echo htmlspecialchars($activeSubject['day_of_week']); ?> <?php echo formatTime($activeSubject['start_time']); ?><?php echo $activeSubject['end_time'] ? ' - ' . formatTime($activeSubject['end_time']) : ''; ?></p>
+                    <p class="text-muted mb-2"><strong><?php echo htmlspecialchars($activeSubject['name']); ?></strong> &mdash; <?php echo $activeSubject['is_makeup'] ? '<span class="badge bg-warning text-dark">Makeup Class</span> ' : htmlspecialchars($activeSubject['day_of_week']) . ' '; ?><?php echo formatTime($activeSubject['start_time']); ?><?php echo $activeSubject['end_time'] ? ' - ' . formatTime($activeSubject['end_time']) : ''; ?></p>
+                    <?php if ($activeSubject['is_makeup'] && !empty($activeSubject['makeup_note'])): ?>
+                        <p class="text-muted small mb-2"><i class="fa-solid fa-circle-info me-1"></i><?php echo htmlspecialchars($activeSubject['makeup_note']); ?></p>
+                    <?php endif; ?>
                     <div class="d-flex flex-wrap gap-2">
                         <span class="sp-shd-pill"><i class="fa-solid fa-graduation-cap"></i> <?php echo htmlspecialchars($activeSubject['course_code'] . ' - ' . $activeSubject['course_name']); ?></span>
                         <span class="sp-shd-pill"><i class="fa-solid fa-user-group"></i> <?php echo htmlspecialchars($activeSubject['year_level'] . ' - ' . $activeSubject['room_name']); ?></span>
@@ -137,11 +158,11 @@ if ($isTeacherView) {
                     </div>
                     <div class="sp-policy-item mb-0">
                         <span class="sp-policy-dot bg-warning"></span>
-                        <span>1&ndash;<?php echo $absentCutoff - 1; ?> min: <strong>Late</strong></span>
+                        <span>Until class ends: <strong>Late</strong></span>
                     </div>
                     <div class="sp-policy-item mb-0">
                         <span class="sp-policy-dot bg-danger"></span>
-                        <span><?php echo $absentCutoff; ?>+ min: <strong>Absent</strong></span>
+                        <span><?php echo $absentCutoff; ?>+ min after end: <strong>Absent</strong></span>
                     </div>
                 </div>
             </div>

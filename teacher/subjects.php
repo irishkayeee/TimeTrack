@@ -27,6 +27,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             flash('Select at least one day.', 'danger');
             redirect('subjects.php');
         }
+        if (!$endTime) {
+            flash('Please set an end time — it defines when the class session ends for attendance purposes.', 'danger');
+            redirect('subjects.php');
+        }
 
         $refStmt = $mysqli->prepare('SELECT code, name, room_id, subject_room, credit_units, status FROM subjects WHERE id = ? AND teacher_id = ? LIMIT 1');
         $refStmt->bind_param('ii', $id, $teacherId);
@@ -48,6 +52,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $existingByDay[$row['day_of_week']] = (int) $row['id'];
         }
         $groupStmt->close();
+
+        // Pair up simple day swaps (e.g. Mon -> Sun on a single-day class) and rename
+        // those rows in place instead of deleting + recreating them below. This keeps
+        // the same id (so enrollments/attendance/join_code never need to move) and
+        // keeps the row's created_at, so it doesn't jump to the top of admin's
+        // "newest first" subject list looking like a brand new class.
+        $droppedDays = array_values(array_diff(array_keys($existingByDay), $selectedDays));
+        $addedDays = array_values(array_diff($selectedDays, array_keys($existingByDay)));
+        $renamePairs = min(count($droppedDays), count($addedDays));
+        for ($i = 0; $i < $renamePairs; $i++) {
+            $oldDay = $droppedDays[$i];
+            $newDay = $addedDays[$i];
+            $rowId = $existingByDay[$oldDay];
+            $ren = $mysqli->prepare('UPDATE subjects SET day_of_week = ?, start_time = ?, end_time = ? WHERE id = ? AND teacher_id = ?');
+            $ren->bind_param('sssii', $newDay, $startTime, $endTime, $rowId, $teacherId);
+            $ren->execute();
+            $ren->close();
+            unset($existingByDay[$oldDay]);
+            $existingByDay[$newDay] = $rowId;
+        }
 
         // A day dropped from the schedule below gets its row deleted; enrollments
         // cascade-delete on that FK, so pick a row that survives the edit and
@@ -174,6 +198,65 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash('Subject room updated.', 'success');
         redirect('subjects.php');
     }
+    if ($_POST['action'] === 'add_makeup_session') {
+        $id = intval($_POST['id'] ?? 0);
+        $sessionDate = sanitize($_POST['session_date'] ?? '');
+        $startTime = sanitize($_POST['start_time'] ?? '');
+        $endTime = sanitize($_POST['end_time'] ?? '');
+        $endTimeParam = $endTime ?: null;
+        $note = trim(sanitize($_POST['note'] ?? ''));
+        $noteParam = $note !== '' ? $note : null;
+
+        $dateObj = DateTime::createFromFormat('Y-m-d', $sessionDate);
+        if (!$dateObj || $dateObj->format('Y-m-d') !== $sessionDate || !$startTime) {
+            flash('Please provide a valid date and start time.', 'danger');
+            redirect('subjects.php');
+        }
+
+        $refStmt = $mysqli->prepare('SELECT code, name FROM subjects WHERE id = ? AND teacher_id = ? LIMIT 1');
+        $refStmt->bind_param('ii', $id, $teacherId);
+        $refStmt->execute();
+        $ref = $refStmt->get_result()->fetch_assoc();
+        $refStmt->close();
+
+        if (!$ref) {
+            flash('Class not found.', 'danger');
+            redirect('subjects.php');
+        }
+
+        $ins = $mysqli->prepare('INSERT INTO makeup_sessions (subject_id, teacher_id, session_date, start_time, end_time, note) VALUES (?, ?, ?, ?, ?, ?)');
+        $ins->bind_param('iissss', $id, $teacherId, $sessionDate, $startTime, $endTimeParam, $noteParam);
+        $ins->execute();
+        $ins->close();
+
+        // Notify everyone currently enrolled in this specific class — a makeup
+        // session is additive and never touches the recurring weekly schedule.
+        $subjectLabel = $ref['code'] . ' - ' . $ref['name'];
+        $notifMessage = 'A makeup class for ' . $subjectLabel . ' has been scheduled on ' . formatDate($sessionDate) . ' at ' . formatTime($startTime) . '.';
+        $studentsStmt = $mysqli->prepare('SELECT student_id FROM enrollments WHERE subject_id = ?');
+        $studentsStmt->bind_param('i', $id);
+        $studentsStmt->execute();
+        $enrolledIds = $studentsStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+        $studentsStmt->close();
+        foreach ($enrolledIds as $enrolledRow) {
+            $notifStmt = $mysqli->prepare("INSERT INTO notifications (student_id, subject_id, type, title, message, is_read, created_at) VALUES (?, ?, 'makeup_class', 'Makeup Class Scheduled', ?, 0, NOW())");
+            $notifStmt->bind_param('iis', $enrolledRow['student_id'], $id, $notifMessage);
+            $notifStmt->execute();
+            $notifStmt->close();
+        }
+
+        flash('Makeup class scheduled and students notified.', 'success');
+        redirect('subjects.php');
+    }
+    if ($_POST['action'] === 'delete_makeup_session' && !empty($_POST['makeup_id'])) {
+        $makeupId = intval($_POST['makeup_id']);
+        $del = $mysqli->prepare('DELETE FROM makeup_sessions WHERE id = ? AND teacher_id = ?');
+        $del->bind_param('ii', $makeupId, $teacherId);
+        $del->execute();
+        $del->close();
+        flash('Makeup class removed.', 'success');
+        redirect('subjects.php');
+    }
     if ($_POST['action'] === 'create_class') {
         $code = trim(sanitize($_POST['code'] ?? ''));
         $name = trim(sanitize($_POST['name'] ?? ''));
@@ -191,6 +274,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($code === '' || $name === '' || !$roomId || empty($selectedDays)) {
             flash('Please fill in the class code, name, room, and select at least one day.', 'danger');
+            redirect('subjects.php');
+        }
+        if (!$endTimeParam) {
+            flash('Please set an end time — it defines when the class session ends for attendance purposes.', 'danger');
             redirect('subjects.php');
         }
 
@@ -353,6 +440,12 @@ foreach ($cardGroups as &$group) {
     });
     $group['action_id'] = $group['day_ids'][$todayCode] ?? $group['day_ids'][$group['days'][0]];
     $group['join_code'] = ensureClassJoinCode($mysqli, $group['id']);
+
+    $makeupStmt = $mysqli->prepare('SELECT id, session_date, start_time, end_time, note FROM makeup_sessions WHERE subject_id = ? AND session_date >= CURDATE() ORDER BY session_date, start_time');
+    $makeupStmt->bind_param('i', $group['action_id']);
+    $makeupStmt->execute();
+    $group['upcoming_makeups'] = $makeupStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    $makeupStmt->close();
 }
 unset($group);
 
@@ -459,6 +552,8 @@ require_once __DIR__ . '/../includes/teacher_header.php';
                                     <li><button class="dropdown-item btn-edit-schedule" type="button" data-data='<?php echo json_encode($group); ?>'><i class="fa-solid fa-calendar-days"></i> Edit Schedule</button></li>
                                     <li><button class="dropdown-item btn-edit-policy" type="button" data-data='<?php echo json_encode($group); ?>'><i class="fa-solid fa-shield-halved"></i> Edit Attendance Policy</button></li>
                                     <li><button class="dropdown-item btn-edit-subject-room" type="button" data-data='<?php echo json_encode($group); ?>'><i class="fa-solid fa-door-open"></i> Edit Subject Room</button></li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li><button class="dropdown-item btn-add-makeup" type="button" data-data='<?php echo json_encode($group); ?>'><i class="fa-solid fa-calendar-plus"></i> Add Makeup Class</button></li>
                                 </ul>
                             </div>
                         </div>
@@ -503,7 +598,7 @@ require_once __DIR__ . '/../includes/teacher_header.php';
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">End Time</label>
-                        <input type="time" class="form-control" name="end_time" id="scheduleEndTimeField">
+                        <input type="time" class="form-control" name="end_time" id="scheduleEndTimeField" required>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -569,6 +664,51 @@ require_once __DIR__ . '/../includes/teacher_header.php';
     </div>
 </div>
 
+<div class="modal fade" id="makeupModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-4">
+            <div class="modal-header">
+                <h5 class="modal-title" id="makeupModalTitle">Add Makeup Class</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="post">
+                <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
+                <input type="hidden" name="action" value="add_makeup_session">
+                <input type="hidden" name="id" id="makeupIdField">
+                <div class="modal-body row g-3">
+                    <p class="text-muted small mb-0">Schedules a one-time extra session — your regular weekly schedule stays untouched, and every enrolled student is notified.</p>
+                    <div class="col-md-6">
+                        <label class="form-label">Date</label>
+                        <input type="date" class="form-control" name="session_date" id="makeupDateField" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Start Time</label>
+                        <input type="time" class="form-control" name="start_time" id="makeupStartTimeField" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">End Time</label>
+                        <input type="time" class="form-control" name="end_time" id="makeupEndTimeField">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Note <span class="text-muted fw-normal">(optional)</span></label>
+                        <input type="text" class="form-control" name="note" maxlength="255" placeholder="e.g. Makeup for the class suspension on Sept 15">
+                    </div>
+                    <div class="col-12" id="makeupUpcomingList"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add Makeup Class</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<form method="post" id="deleteMakeupForm" class="d-none">
+    <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
+    <input type="hidden" name="action" value="delete_makeup_session">
+    <input type="hidden" name="makeup_id" id="deleteMakeupIdField">
+</form>
+
 <div class="modal fade" id="createClassModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content rounded-4">
@@ -619,7 +759,7 @@ require_once __DIR__ . '/../includes/teacher_header.php';
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">End Time</label>
-                        <input type="time" class="form-control" name="end_time">
+                        <input type="time" class="form-control" name="end_time" required>
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Credit Units</label>
@@ -684,6 +824,49 @@ document.addEventListener('DOMContentLoaded', function () {
             document.getElementById('subjectRoomField').value = data.subject_room || '';
             subjectRoomModal.show();
         });
+    });
+
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str == null ? '' : String(str);
+        return div.innerHTML;
+    }
+
+    const makeupModal = new bootstrap.Modal(document.getElementById('makeupModal'));
+    const makeupUpcomingList = document.getElementById('makeupUpcomingList');
+    document.querySelectorAll('.btn-add-makeup').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const data = JSON.parse(btn.getAttribute('data-data'));
+            document.getElementById('makeupModalTitle').textContent = 'Add Makeup Class — ' + data.name;
+            document.getElementById('makeupIdField').value = data.action_id;
+            document.getElementById('makeupDateField').value = '';
+            document.getElementById('makeupStartTimeField').value = '';
+            document.getElementById('makeupEndTimeField').value = '';
+
+            const makeups = data.upcoming_makeups || [];
+            if (makeups.length === 0) {
+                makeupUpcomingList.innerHTML = '';
+            } else {
+                let html = '<hr><label class="form-label small text-muted">Upcoming Makeup Classes</label>';
+                makeups.forEach(m => {
+                    const timeLabel = m.start_time + (m.end_time ? ' - ' + m.end_time : '');
+                    html += '<div class="d-flex align-items-center justify-content-between border rounded-3 p-2 mb-2">'
+                        + '<div><div class="small fw-semibold">' + escapeHtml(m.session_date) + ' · ' + escapeHtml(timeLabel) + '</div>'
+                        + (m.note ? '<div class="small text-muted">' + escapeHtml(m.note) + '</div>' : '') + '</div>'
+                        + '<button type="button" class="btn btn-sm btn-outline-danger btn-delete-makeup" data-makeup-id="' + m.id + '"><i class="fa-solid fa-trash"></i></button>'
+                        + '</div>';
+                });
+                makeupUpcomingList.innerHTML = html;
+            }
+            makeupModal.show();
+        });
+    });
+    makeupUpcomingList.addEventListener('click', (e) => {
+        const btn = e.target.closest('.btn-delete-makeup');
+        if (!btn) return;
+        if (!confirm('Remove this makeup class?')) return;
+        document.getElementById('deleteMakeupIdField').value = btn.getAttribute('data-makeup-id');
+        document.getElementById('deleteMakeupForm').submit();
     });
 
     const mcSearchInput = document.getElementById('mcSearchInput');

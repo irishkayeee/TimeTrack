@@ -27,26 +27,15 @@ $stmt->bind_result($mySubjectsCount);
 $stmt->fetch();
 $stmt->close();
 
+// Counts students explicitly enrolled in any of this teacher's classes — room/section
+// membership alone no longer counts as being one of "my students".
 $myStudentsCount = 0;
-$roomStmt = $mysqli->prepare('SELECT DISTINCT sec.id FROM subjects sub JOIN rooms sec ON sub.room_id = sec.id WHERE sub.teacher_id = ?');
-$roomStmt->bind_param('i', $teacherId);
-$roomStmt->execute();
-$roomResult = $roomStmt->get_result();
-$allowedRooms = [];
-while ($row = $roomResult->fetch_assoc()) {
-    $allowedRooms[] = (int) $row['id'];
-}
-$roomStmt->close();
-if ($allowedRooms) {
-    $placeholders = implode(',', array_fill(0, count($allowedRooms), '?'));
-    $types = str_repeat('i', count($allowedRooms));
-    $countStmt = $mysqli->prepare("SELECT COUNT(*) FROM students WHERE room_id IN ($placeholders)");
-    $countStmt->bind_param($types, ...$allowedRooms);
-    $countStmt->execute();
-    $countStmt->bind_result($myStudentsCount);
-    $countStmt->fetch();
-    $countStmt->close();
-}
+$countStmt = $mysqli->prepare('SELECT COUNT(DISTINCT e.student_id) FROM enrollments e JOIN subjects sub ON e.subject_id = sub.id WHERE sub.teacher_id = ?');
+$countStmt->bind_param('i', $teacherId);
+$countStmt->execute();
+$countStmt->bind_result($myStudentsCount);
+$countStmt->fetch();
+$countStmt->close();
 
 $dayMap = ['Mon' => 1, 'Tue' => 2, 'Wed' => 3, 'Thu' => 4, 'Fri' => 5, 'Sat' => 6, 'Sun' => 7];
 $todayCode = array_search((int) date('N'), $dayMap);
@@ -58,15 +47,43 @@ $todaySubjects = $stmt->get_result();
 
 $totalCounts = ['present' => 0, 'late' => 0, 'absent' => 0, 'pending' => 0];
 $todaySubjectRows = [];
+$todaySubjectIds = [];
 while ($row = $todaySubjects->fetch_assoc()) {
     $roster = getLiveRosterForSubject($mysqli, $row['id']);
     foreach ($totalCounts as $key => $value) {
         $totalCounts[$key] += $roster['counts'][$key];
     }
     $row['counts'] = $roster['counts'];
+    $row['is_makeup'] = false;
     $todaySubjectRows[] = $row;
+    $todaySubjectIds[] = (int) $row['id'];
 }
 $stmt->close();
+
+// Today's makeup sessions (one-time extra classes) sit alongside the regular
+// schedule without ever changing it.
+$makeupStmt = $mysqli->prepare("SELECT sub.*, sec.room_name, ms.start_time AS makeup_start_time, ms.end_time AS makeup_end_time, ms.note AS makeup_note FROM makeup_sessions ms JOIN subjects sub ON ms.subject_id = sub.id JOIN rooms sec ON sub.room_id = sec.id WHERE ms.teacher_id = ? AND ms.session_date = CURDATE()");
+$makeupStmt->bind_param('i', $teacherId);
+$makeupStmt->execute();
+$makeupResult = $makeupStmt->get_result();
+while ($row = $makeupResult->fetch_assoc()) {
+    if (in_array((int) $row['id'], $todaySubjectIds, true)) {
+        continue;
+    }
+    $row['start_time'] = $row['makeup_start_time'];
+    $row['end_time'] = $row['makeup_end_time'];
+    $roster = getLiveRosterForSubject($mysqli, $row['id']);
+    foreach ($totalCounts as $key => $value) {
+        $totalCounts[$key] += $roster['counts'][$key];
+    }
+    $row['counts'] = $roster['counts'];
+    $row['is_makeup'] = true;
+    $todaySubjectRows[] = $row;
+}
+$makeupStmt->close();
+usort($todaySubjectRows, function ($a, $b) {
+    return strcmp($a['start_time'], $b['start_time']);
+});
 
 // ---- Analytics (scoped to this teacher's own classes) ----
 $trendLabels = [];
@@ -189,12 +206,13 @@ require_once __DIR__ . '/../includes/teacher_header.php';
                                     <i class="fa-solid <?php echo $theme['icon']; ?> sp-subject-icon"></i>
                                     <span class="sp-subject-code"><?php echo htmlspecialchars($row['code']); ?></span>
                                     <span class="sp-subject-name"><?php echo htmlspecialchars($row['name']); ?></span>
+                                    <?php if ($row['is_makeup']): ?><span class="badge bg-warning text-dark ms-1">Makeup</span><?php endif; ?>
                                 </div>
                                 <div class="sp-subject-body">
                                     <div class="sp-subject-teacher">
                                         <div class="sp-subject-meta">
                                             <span class="sp-subject-prof"><?php echo htmlspecialchars($row['room_name']); ?></span>
-                                            <?php echo htmlspecialchars($row['day_of_week']); ?> | <?php echo formatTime($row['start_time']); ?>
+                                            <?php echo $row['is_makeup'] ? 'Makeup Class' : htmlspecialchars($row['day_of_week']); ?> | <?php echo formatTime($row['start_time']); ?>
                                         </div>
                                         <i class="fa-solid fa-circle-user sp-subject-avatar fa-2x text-secondary"></i>
                                     </div>

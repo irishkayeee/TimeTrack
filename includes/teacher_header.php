@@ -13,6 +13,11 @@ if ($teacherDbId !== false) {
     generateTeacherClassNotifications($mysqli, $teacherDbId);
     $teacherUnreadCount = unreadTeacherNotificationCount($teacherDbId);
 }
+// This header is also included from pages outside /teacher/ (e.g. admin/scanner.php,
+// shared for the teacher view of Take Attendance). Its nav links are written relative
+// to /teacher/, so from anywhere else they must be prefixed back to that folder or
+// they resolve against the including page's own directory and 404.
+$teacherBase = (strtolower(basename(dirname($_SERVER['SCRIPT_FILENAME']))) === 'teacher') ? '' : '../teacher/';
 $navItems = [
     ['href' => 'dashboard.php', 'icon' => 'fa-table-cells', 'label' => 'Dashboard'],
     ['href' => 'subjects.php', 'icon' => 'fa-book', 'label' => 'My Classes'],
@@ -44,7 +49,7 @@ $navItems = [
         <div class="sp-brand-divider"></div>
         <nav class="sp-nav">
             <?php foreach ($navItems as $item): ?>
-                <a href="<?php echo $item['href']; ?>" class="sp-nav-link<?php echo $currentPage === $item['href'] ? ' active' : ''; ?>">
+                <a href="<?php echo $teacherBase . $item['href']; ?>" class="sp-nav-link<?php echo $currentPage === $item['href'] ? ' active' : ''; ?>">
                     <span class="sp-nav-icon"><i class="fa-solid <?php echo $item['icon']; ?>"></i></span>
                     <span class="sp-nav-label"><?php echo $item['label']; ?></span>
                     <?php if ($item['href'] === 'announcements.php'): ?>

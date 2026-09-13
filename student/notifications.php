@@ -16,7 +16,7 @@ $stmt->execute();
 $notifications = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 $stmt->close();
 
-$notifIcons = ['present' => 'fa-circle-check', 'late' => 'fa-clock', 'absent' => 'fa-triangle-exclamation', 'enrolled' => 'fa-user-plus', 'unenrolled' => 'fa-user-minus'];
+$notifIcons = ['present' => 'fa-circle-check', 'late' => 'fa-clock', 'absent' => 'fa-triangle-exclamation', 'enrolled' => 'fa-user-plus', 'unenrolled' => 'fa-user-minus', 'makeup_class' => 'fa-calendar-plus'];
 
 $notifSubjects = [];
 foreach ($notifications as $n) {
@@ -40,6 +40,7 @@ require_once __DIR__ . '/../includes/student_header.php';
     <button type="button" class="btn btn-sm rounded-pill" data-filter="late">Late</button>
     <button type="button" class="btn btn-sm rounded-pill" data-filter="absent">Absent</button>
     <button type="button" class="btn btn-sm rounded-pill" data-filter="enrolled">Enrollment</button>
+    <button type="button" class="btn btn-sm rounded-pill" data-filter="makeup_class">Makeup Classes</button>
     <button type="button" class="btn btn-sm rounded-pill" data-filter="unread">Unread</button>
     <select class="form-select form-select-sm sp-filter-select ms-auto" id="spNotifSubjectFilter" style="width:auto;">
         <option value="all">All Subjects</option>

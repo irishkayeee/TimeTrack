@@ -52,14 +52,7 @@ while ($subjectRow = $subjectsResult->fetch_assoc()) {
 $stmt->close();
 
 // Today's Classes — this student's enrolled subjects scheduled for today, with live status.
-$dayMap = ['Mon' => 1, 'Tue' => 2, 'Wed' => 3, 'Thu' => 4, 'Fri' => 5, 'Sat' => 6, 'Sun' => 7];
-$todayCode = array_search((int) date('N'), $dayMap);
-$todayClasses = [];
-$stmt = $mysqli->prepare("SELECT sub.*, CONCAT(t.first_name, ' ', t.last_name) AS teacher_name FROM subjects sub LEFT JOIN teachers t ON sub.teacher_id = t.id JOIN enrollments e ON e.subject_id = sub.id AND e.student_id = ? WHERE sub.day_of_week = ? AND sub.status = 'active' ORDER BY sub.start_time");
-$stmt->bind_param('is', $studentDbId, $todayCode);
-$stmt->execute();
-$todayResult = $stmt->get_result();
-while ($row = $todayResult->fetch_assoc()) {
+function attachTodayDisplayStatus($mysqli, $studentDbId, $row) {
     $attStmt = $mysqli->prepare("SELECT status, time FROM attendance WHERE student_id = ? AND subject_id = ? AND date = CURDATE() LIMIT 1");
     $attStmt->bind_param('ii', $studentDbId, $row['id']);
     $attStmt->execute();
@@ -77,9 +70,43 @@ while ($row = $todayResult->fetch_assoc()) {
             $row['display_status'] = 'absent';
         }
     }
-    $todayClasses[] = $row;
+    return $row;
+}
+
+$dayMap = ['Mon' => 1, 'Tue' => 2, 'Wed' => 3, 'Thu' => 4, 'Fri' => 5, 'Sat' => 6, 'Sun' => 7];
+$todayCode = array_search((int) date('N'), $dayMap);
+$todayClasses = [];
+$todayClassIds = [];
+$stmt = $mysqli->prepare("SELECT sub.*, CONCAT(t.first_name, ' ', t.last_name) AS teacher_name FROM subjects sub LEFT JOIN teachers t ON sub.teacher_id = t.id JOIN enrollments e ON e.subject_id = sub.id AND e.student_id = ? WHERE sub.day_of_week = ? AND sub.status = 'active' ORDER BY sub.start_time");
+$stmt->bind_param('is', $studentDbId, $todayCode);
+$stmt->execute();
+$todayResult = $stmt->get_result();
+while ($row = $todayResult->fetch_assoc()) {
+    $row['is_makeup'] = false;
+    $todayClasses[] = attachTodayDisplayStatus($mysqli, $studentDbId, $row);
+    $todayClassIds[] = (int) $row['id'];
 }
 $stmt->close();
+
+// Today's makeup sessions — one-time extra classes for subjects the student is
+// enrolled in, layered on top without ever changing the recurring schedule.
+$makeupStmt = $mysqli->prepare("SELECT sub.*, CONCAT(t.first_name, ' ', t.last_name) AS teacher_name, ms.start_time AS makeup_start_time, ms.end_time AS makeup_end_time, ms.note AS makeup_note FROM makeup_sessions ms JOIN subjects sub ON ms.subject_id = sub.id LEFT JOIN teachers t ON sub.teacher_id = t.id JOIN enrollments e ON e.subject_id = sub.id AND e.student_id = ? WHERE ms.session_date = CURDATE()");
+$makeupStmt->bind_param('i', $studentDbId);
+$makeupStmt->execute();
+$makeupResult = $makeupStmt->get_result();
+while ($row = $makeupResult->fetch_assoc()) {
+    if (in_array((int) $row['id'], $todayClassIds, true)) {
+        continue;
+    }
+    $row['start_time'] = $row['makeup_start_time'];
+    $row['end_time'] = $row['makeup_end_time'];
+    $row['is_makeup'] = true;
+    $todayClasses[] = attachTodayDisplayStatus($mysqli, $studentDbId, $row);
+}
+$makeupStmt->close();
+usort($todayClasses, function ($a, $b) {
+    return strcmp($a['start_time'], $b['start_time']);
+});
 
 // Recent Attendance — last 5 records across all subjects, with remarks.
 $recentStmt = $mysqli->prepare('SELECT a.*, sub.name AS subject_name, sub.start_time AS subject_start_time FROM attendance a LEFT JOIN subjects sub ON a.subject_id = sub.id WHERE a.student_id = ? ORDER BY a.date DESC, a.time DESC LIMIT 5');
@@ -188,7 +215,7 @@ require_once __DIR__ . '/../includes/student_header.php';
                             <span class="text-muted"><?php echo $row['end_time'] ? formatTime($row['end_time']) : ''; ?></span>
                         </div>
                         <div class="flex-grow-1">
-                            <div class="fw-semibold"><?php echo htmlspecialchars($row['name']); ?></div>
+                            <div class="fw-semibold"><?php echo htmlspecialchars($row['name']); ?><?php if (!empty($row['is_makeup'])): ?> <span class="badge bg-warning text-dark">Makeup</span><?php endif; ?></div>
                             <div class="text-muted small">Prof. <?php echo htmlspecialchars($row['teacher_name'] ?: 'Unassigned'); ?><?php echo $row['subject_room'] ? ' · ' . htmlspecialchars($row['subject_room']) : ''; ?></div>
                         </div>
                         <?php if ($row['display_status'] === 'upcoming'): ?>

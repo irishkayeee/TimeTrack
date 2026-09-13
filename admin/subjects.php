@@ -25,6 +25,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $status = sanitize($_POST['status'] ?? 'active');
         $teacherIdParam = $teacherId ?: null;
 
+        if (!$endTimeParam) {
+            flash('Please set an end time — it defines when the class session ends for attendance purposes.', 'danger');
+            redirect('subjects.php');
+        }
+
         $previousTeacherId = null;
         $previousDay = null;
         $previousStartTime = null;
@@ -171,7 +176,7 @@ require_once __DIR__ . '/../includes/admin_header.php';
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">End Time</label>
-                        <input type="time" class="form-control" name="end_time" id="subjectEndTimeField">
+                        <input type="time" class="form-control" name="end_time" id="subjectEndTimeField" required>
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Subject Room</label>

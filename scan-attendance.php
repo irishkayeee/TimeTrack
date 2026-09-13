@@ -25,11 +25,23 @@ if (preg_match('/^(.+)\|SUBJ(\d+)$/', $qrValue, $matches)) {
     $qrValue = $matches[1];
     $qrSubjectId = intval($matches[2]);
     if ($qrSubjectId !== $subjectId) {
-        echo json_encode(['status' => 'error', 'message' => 'This QR code is for a different subject.']);
-        exit;
+        // A class that meets on multiple days is stored as one subjects row per
+        // meeting day (same teacher + room + code, different id). A QR generated
+        // from one day's row is still valid for another day's session of the
+        // same class, so only reject when they're genuinely different classes.
+        $classMatch = $mysqli->prepare('SELECT COUNT(*) FROM subjects a JOIN subjects b ON a.teacher_id <=> b.teacher_id AND a.room_id = b.room_id AND a.code = b.code WHERE a.id = ? AND b.id = ?');
+        $classMatch->bind_param('ii', $qrSubjectId, $subjectId);
+        $classMatch->execute();
+        $classMatch->bind_result($classMatchCount);
+        $classMatch->fetch();
+        $classMatch->close();
+        if ($classMatchCount == 0) {
+            echo json_encode(['status' => 'error', 'message' => 'This QR code is for a different subject.']);
+            exit;
+        }
     }
 }
-$stmt = $mysqli->prepare("SELECT id, name, room_id, start_time, day_of_week, absent_cutoff_minutes FROM subjects WHERE id = ? AND status = 'active' LIMIT 1");
+$stmt = $mysqli->prepare("SELECT id, name, room_id, start_time, end_time, day_of_week, absent_cutoff_minutes FROM subjects WHERE id = ? AND status = 'active' LIMIT 1");
 $stmt->bind_param('i', $subjectId);
 $stmt->execute();
 $subject = $stmt->get_result()->fetch_assoc();
@@ -74,8 +86,22 @@ if ($countToday > 0) {
     exit;
 }
 
+// A makeup session scheduled for today overrides the regular weekly start/end time
+// when computing present/late/absent, without ever touching the recurring schedule.
+$effectiveStartTime = $subject['start_time'];
+$effectiveEndTime = $subject['end_time'];
+$makeupStmt = $mysqli->prepare('SELECT start_time, end_time FROM makeup_sessions WHERE subject_id = ? AND session_date = CURDATE() LIMIT 1');
+$makeupStmt->bind_param('i', $subjectId);
+$makeupStmt->execute();
+$makeupStmt->bind_result($makeupStartTime, $makeupEndTime);
+if ($makeupStmt->fetch()) {
+    $effectiveStartTime = $makeupStartTime;
+    $effectiveEndTime = $makeupEndTime;
+}
+$makeupStmt->close();
+
 $scanTime = date('H:i:s');
-$status = computeAttendanceStatus($subject['start_time'], $scanTime, $subject['absent_cutoff_minutes']);
+$status = computeAttendanceStatus($effectiveStartTime, $effectiveEndTime, $scanTime, $subject['absent_cutoff_minutes']);
 
 $stmt = $mysqli->prepare('INSERT INTO attendance (student_id, course_id, room_id, subject_id, status, scan_type, date, time, created_at) VALUES (?, ?, ?, ?, ?, ?, CURDATE(), ?, NOW())');
 $stmt->bind_param('iiiisss', $student['id'], $student['course_id'], $student['room_id'], $subjectId, $status, $status, $scanTime);

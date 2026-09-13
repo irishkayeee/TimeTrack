@@ -184,17 +184,6 @@ require_once __DIR__ . '/../includes/student_header.php';
         <input type="text" class="form-control" id="spSubjectSearch" placeholder="Search subjects...">
     </div>
     <div class="d-flex gap-2">
-        <?php $allSubjects = array_merge($activeSubjects, $inactiveSubjects); ?>
-        <div class="dropdown">
-            <button type="button" class="btn btn-outline-success rounded-pill dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" <?php echo empty($allSubjects) ? 'disabled' : ''; ?>>
-                <i class="fa-solid fa-qrcode me-1"></i> QR Code
-            </button>
-            <ul class="dropdown-menu dropdown-menu-end">
-                <?php foreach ($allSubjects as $s): ?>
-                    <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#qrModal<?php echo $s['id']; ?>"><?php echo htmlspecialchars($s['code'] . ' - ' . $s['name']); ?></a></li>
-                <?php endforeach; ?>
-            </ul>
-        </div>
         <button type="button" class="btn btn-primary rounded-pill" data-bs-toggle="modal" data-bs-target="#joinClassModal">
             <i class="fa-solid fa-plus me-1"></i> Join Class
         </button>

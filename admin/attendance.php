@@ -3,6 +3,8 @@ require_once __DIR__ . '/../includes/functions.php';
 requireRole(['admin', 'superadmin', 'teacher']);
 $pageTitle = 'Attendance Records';
 
+finalizeTodaysAbsences($mysqli);
+
 $period = $_REQUEST['period'] ?? 'all';
 if (!in_array($period, ['all', 'today', 'month', 'specific', 'range'])) {
     $period = 'all';
