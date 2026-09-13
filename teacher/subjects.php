@@ -245,7 +245,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $notifStmt->close();
         }
 
-        flash('Makeup class scheduled and students notified.', 'success');
+        // Also post it as a class announcement so it shows up on the Announcements
+        // tab for both the teacher and students, not just the one-time notification.
+        // Posted to every meeting-day row of this class (same teacher+room+code),
+        // since each day-row has its own announcements list.
+        $announceTitle = 'Makeup Class Scheduled';
+        $announceMessage = 'A makeup class has been scheduled on ' . formatDate($sessionDate) . ' at ' . formatTime($startTime) . ($endTimeParam ? ' - ' . formatTime($endTimeParam) : '') . '.' . ($noteParam ? ' ' . $noteParam : '');
+        $classRowsStmt = $mysqli->prepare('SELECT b.id FROM subjects a JOIN subjects b ON a.teacher_id <=> b.teacher_id AND a.room_id = b.room_id AND a.code = b.code WHERE a.id = ?');
+        $classRowsStmt->bind_param('i', $id);
+        $classRowsStmt->execute();
+        $classRowIds = array_column($classRowsStmt->get_result()->fetch_all(MYSQLI_ASSOC), 'id');
+        $classRowsStmt->close();
+        foreach ($classRowIds as $rowId) {
+            $announceStmt = $mysqli->prepare("INSERT INTO class_announcements (subject_id, teacher_id, source, title, message) VALUES (?, ?, 'makeup', ?, ?)");
+            $announceStmt->bind_param('iiss', $rowId, $teacherId, $announceTitle, $announceMessage);
+            $announceStmt->execute();
+            $announceStmt->close();
+        }
+
+        flash('Makeup class scheduled, students notified, and an announcement was posted.', 'success');
         redirect('subjects.php');
     }
     if ($_POST['action'] === 'delete_makeup_session' && !empty($_POST['makeup_id'])) {

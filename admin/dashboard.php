@@ -198,10 +198,10 @@ require_once __DIR__ . '/../includes/admin_header.php';
         var timeEl = document.getElementById('spClockTime');
         var dateEl = document.getElementById('spClockDate');
         if (timeEl) {
-            timeEl.textContent = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+            timeEl.textContent = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true, timeZone: 'Asia/Manila' });
         }
         if (dateEl) {
-            dateEl.textContent = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+            dateEl.textContent = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'Asia/Manila' });
         }
         var greetingEl = document.getElementById('spGreetingWord');
         if (greetingEl) {
@@ -621,7 +621,7 @@ document.addEventListener('DOMContentLoaded', function () {
         doc.text('TimeTrack — ' + title, 40, 40);
         doc.setFontSize(10);
         doc.setTextColor(120, 120, 120);
-        doc.text('<?php echo htmlspecialchars(addslashes($schoolName)); ?> — Generated ' + new Date().toLocaleString('en-US'), 40, 58);
+        doc.text('<?php echo htmlspecialchars(addslashes($schoolName)); ?> — Generated ' + new Date().toLocaleString('en-US', { timeZone: 'Asia/Manila' }), 40, 58);
 
         var imgWidth = pageWidth - 80;
         var imgHeight = chartInstance.height * (imgWidth / chartInstance.width);

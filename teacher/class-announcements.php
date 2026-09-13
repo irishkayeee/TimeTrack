@@ -52,7 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             flash('Announcement posted.', 'success');
         } else {
             $id = intval($_POST['id'] ?? 0);
-            $stmt = $mysqli->prepare('UPDATE class_announcements SET title = ?, message = ?, updated_at = NOW() WHERE id = ? AND subject_id = ? AND teacher_id = ?');
+            $stmt = $mysqli->prepare("UPDATE class_announcements SET title = ?, message = ?, updated_at = NOW() WHERE id = ? AND subject_id = ? AND teacher_id = ? AND source != 'makeup'");
             $stmt->bind_param('ssiii', $title, $message, $id, $subjectId, $teacherId);
             $stmt->execute();
             $stmt->close();
@@ -63,7 +63,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'delete_announcement') {
         $id = intval($_POST['id'] ?? 0);
-        $stmt = $mysqli->prepare('DELETE FROM class_announcements WHERE id = ? AND subject_id = ? AND teacher_id = ?');
+        $stmt = $mysqli->prepare("DELETE FROM class_announcements WHERE id = ? AND subject_id = ? AND teacher_id = ? AND source != 'makeup'");
         $stmt->bind_param('iii', $id, $subjectId, $teacherId);
         $stmt->execute();
         $stmt->close();
@@ -126,6 +126,11 @@ require_once __DIR__ . '/../includes/teacher_header.php';
                     </small>
                 </div>
             </div>
+            <?php if ($a['source'] === 'makeup'): ?>
+            <div class="d-flex gap-2 flex-shrink-0">
+                <a href="../admin/scanner.php?subject_id=<?php echo $subject['id']; ?>" class="btn btn-sm btn-primary"><i class="fa-solid fa-qrcode"></i> Take Attendance</a>
+            </div>
+            <?php else: ?>
             <div class="d-flex gap-2 flex-shrink-0">
                 <button type="button" class="btn btn-sm btn-outline-secondary btn-edit-announcement" data-data='<?php echo htmlspecialchars(json_encode($a), ENT_QUOTES, 'UTF-8'); ?>' title="Edit"><i class="fa-solid fa-pen"></i></button>
                 <form method="post" onsubmit="return confirm('Delete this announcement?');">
@@ -135,6 +140,7 @@ require_once __DIR__ . '/../includes/teacher_header.php';
                     <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete"><i class="fa-solid fa-trash"></i></button>
                 </form>
             </div>
+            <?php endif; ?>
         </div>
     </div>
     <?php endforeach; ?>

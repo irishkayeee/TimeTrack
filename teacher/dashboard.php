@@ -364,7 +364,7 @@ document.addEventListener('DOMContentLoaded', function () {
         doc.text('TimeTrack — ' + title, 40, 40);
         doc.setFontSize(10);
         doc.setTextColor(120, 120, 120);
-        doc.text('<?php echo htmlspecialchars(addslashes($schoolName)); ?> — Generated ' + new Date().toLocaleString('en-US'), 40, 58);
+        doc.text('<?php echo htmlspecialchars(addslashes($schoolName)); ?> — Generated ' + new Date().toLocaleString('en-US', { timeZone: 'Asia/Manila' }), 40, 58);
 
         var imgWidth = pageWidth - 80;
         var imgHeight = chartInstance.height * (imgWidth / chartInstance.width);

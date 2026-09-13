@@ -216,10 +216,10 @@ function scanUpdateClock() {
     var timeEl = document.getElementById('scanClockTime');
     var dateEl = document.getElementById('scanClockDate');
     if (timeEl) {
-        timeEl.textContent = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+        timeEl.textContent = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true, timeZone: 'Asia/Manila' });
     }
     if (dateEl) {
-        dateEl.textContent = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+        dateEl.textContent = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'Asia/Manila' });
     }
 }
 scanUpdateClock();
@@ -270,7 +270,7 @@ function addScannedRow(data, statusLabel) {
         ? `<img src="../${data.photo}" class="rounded-circle" style="width:28px;height:28px;object-fit:cover;">`
         : '<i class="fa-solid fa-circle-user text-secondary"></i>';
     const now = new Date();
-    const timeLabel = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+    const timeLabel = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Manila' });
     const row = document.createElement('tr');
     row.setAttribute('data-name', (data.first_name + ' ' + data.last_name + ' ' + data.student_id).toLowerCase());
     row.setAttribute('data-status', statusLabel);
@@ -301,7 +301,7 @@ function showScanResult(data, statusLabel) {
         ? `<img src="../${data.photo}" class="rounded-circle" style="width:64px;height:64px;object-fit:cover;">`
         : '<i class="fa-solid fa-circle-user fa-3x text-secondary"></i>';
     const now = new Date();
-    const timeLabel = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+    const timeLabel = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Manila' });
     const successLine = statusLabel === 'duplicate'
         ? '<div class="text-warning small mt-2"><i class="fa-solid fa-triangle-exclamation me-1"></i>Already recorded for this class today.</div>'
         : '<div class="text-success small mt-2"><i class="fa-solid fa-circle-check me-1"></i>Successfully recorded!</div>';

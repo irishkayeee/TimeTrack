@@ -668,6 +668,8 @@ function finalizeAbsencesForSubject($mysqli, $subject) {
     $today = date('D');
     $todayDate = date('Y-m-d');
 
+    $makeupStartTime = null;
+    $makeupEndTime = null;
     $makeupStmt = $mysqli->prepare('SELECT start_time, end_time FROM makeup_sessions WHERE subject_id = ? AND session_date = CURDATE() LIMIT 1');
     $makeupStmt->bind_param('i', $subject['id']);
     $makeupStmt->execute();
@@ -705,6 +707,7 @@ function finalizeAbsencesForSubject($mysqli, $subject) {
         return;
     }
 
+    $subjectName = null;
     $subjNameStmt = $mysqli->prepare('SELECT name FROM subjects WHERE id = ? LIMIT 1');
     $subjNameStmt->bind_param('i', $subject['id']);
     $subjNameStmt->execute();
@@ -1096,6 +1099,7 @@ function renderTeacherClassHeader($subject, $activeTab) {
         <?php if ($activeTab !== 'details'): ?><a href="class-details.php?id=<?php echo $subject['id']; ?>"><i class="fa-solid fa-file-lines"></i> Details</a><?php endif; ?>
         <?php if ($activeTab !== 'attendance'): ?><a href="attendance.php?subject_id=<?php echo $subject['id']; ?>"><i class="fa-solid fa-clipboard-check"></i> Attendance</a><?php endif; ?>
         <?php if ($activeTab !== 'announcements'): ?><a href="class-announcements.php?subject_id=<?php echo $subject['id']; ?>"><i class="fa-solid fa-bullhorn"></i> Announcements</a><?php endif; ?>
+        <?php if ($activeTab !== 'makeups'): ?><a href="class-makeups.php?subject_id=<?php echo $subject['id']; ?>"><i class="fa-solid fa-calendar-plus"></i> Makeup Classes</a><?php endif; ?>
     </div>
     <?php
 }

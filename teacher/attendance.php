@@ -54,7 +54,10 @@ require_once __DIR__ . '/../includes/teacher_header.php';
 <?php endif; ?>
 
 <div class="card p-4">
-    <div class="d-flex justify-content-end align-items-center mb-3 flex-wrap gap-2">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <?php if ($scopedSubject): ?>
+            <a href="class-details.php?id=<?php echo $scopedSubject['id']; ?>" class="btn btn-outline-secondary btn-sm"><i class="fa-solid fa-arrow-left"></i> Back to Details</a>
+        <?php endif; ?>
         <form method="get" class="d-flex gap-2">
             <?php if ($subjectId): ?>
                 <input type="hidden" name="subject_id" value="<?php echo $subjectId; ?>">
@@ -78,8 +81,8 @@ require_once __DIR__ . '/../includes/teacher_header.php';
             <tbody>
                 <?php while ($row = $result->fetch_assoc()): ?>
                     <tr>
-                        <td><?php echo htmlspecialchars($row['date']); ?></td>
-                        <td><?php echo htmlspecialchars($row['time']); ?></td>
+                        <td><?php echo htmlspecialchars(formatDate($row['date'])); ?></td>
+                        <td><?php echo htmlspecialchars(formatTime($row['time'])); ?></td>
                         <td><?php echo htmlspecialchars($row['student_name']); ?></td>
                         <td><?php echo htmlspecialchars($row['student_id']); ?></td>
                         <td><?php echo htmlspecialchars($row['subject_name']); ?></td>
