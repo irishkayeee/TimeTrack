@@ -16,7 +16,7 @@ $stmt->execute();
 $notifications = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 $stmt->close();
 
-$notifIcons = ['reminder' => 'fa-clock', 'summary' => 'fa-chart-simple', 'assignment' => 'fa-chalkboard-user'];
+$notifIcons = ['reminder' => 'fa-clock', 'summary' => 'fa-chart-simple', 'assignment' => 'fa-chalkboard-user', 'schedule_update' => 'fa-calendar-days'];
 
 $notifSubjects = [];
 foreach ($notifications as $n) {

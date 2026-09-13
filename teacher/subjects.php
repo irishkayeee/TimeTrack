@@ -93,10 +93,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $moveAttendance->execute();
                     $moveAttendance->close();
                 }
+
+                // join_code lives on a single row (see ensureClassJoinCode); if the
+                // dropped day happens to be the one holding it, capture it before the
+                // row is gone so the class's existing code doesn't silently change.
+                $droppedJoinCode = null;
+                if ($survivingRowId !== null) {
+                    $codeStmt = $mysqli->prepare('SELECT join_code FROM subjects WHERE id = ?');
+                    $codeStmt->bind_param('i', $rowId);
+                    $codeStmt->execute();
+                    $codeStmt->bind_result($droppedJoinCode);
+                    $codeStmt->fetch();
+                    $codeStmt->close();
+                }
+
                 $del = $mysqli->prepare('DELETE FROM subjects WHERE id = ? AND teacher_id = ?');
                 $del->bind_param('ii', $rowId, $teacherId);
                 $del->execute();
                 $del->close();
+
+                // Only apply it once the old row is actually gone — join_code is
+                // UNIQUE, so both rows briefly holding the same value would collide.
+                if ($droppedJoinCode) {
+                    $applyCode = $mysqli->prepare('UPDATE subjects SET join_code = ? WHERE id = ? AND join_code IS NULL');
+                    $applyCode->bind_param('si', $droppedJoinCode, $survivingRowId);
+                    $applyCode->execute();
+                    $applyCode->close();
+                }
             }
         }
 

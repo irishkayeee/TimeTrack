@@ -290,15 +290,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $teacherIdParam = $teacherId ?: null;
 
         $previousTeacherId = null;
+        $previousDay = null;
+        $previousStartTime = null;
+        $previousEndTime = null;
         if ($id) {
-            $prevStmt = $mysqli->prepare('SELECT teacher_id FROM subjects WHERE id = ?');
+            $prevStmt = $mysqli->prepare('SELECT teacher_id, day_of_week, start_time, end_time FROM subjects WHERE id = ?');
             $prevStmt->bind_param('i', $id);
             $prevStmt->execute();
-            $prevStmt->bind_result($previousTeacherId);
+            $prevStmt->bind_result($previousTeacherId, $previousDay, $previousStartTime, $previousEndTime);
             $prevStmt->fetch();
             $prevStmt->close();
         }
         $isNewTeacherAssignment = $teacherIdParam && (int) $previousTeacherId !== (int) $teacherIdParam;
+        $isScheduleChange = $id && !$isNewTeacherAssignment && (
+            $previousDay !== $days[0] ||
+            $previousStartTime !== $startTime ||
+            (string) $previousEndTime !== (string) $endTimeParam
+        );
 
         if ($id) {
             $firstDay = $days[0];
@@ -320,6 +328,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($isNewTeacherAssignment) {
             notifyTeacherOfSubjectAssignment($mysqli, $teacherIdParam, $code, $name, $days, $startTime);
+        } elseif ($teacherIdParam && $isScheduleChange) {
+            notifyTeacherOfScheduleChange($mysqli, $teacherIdParam, $code, $name, $days, $startTime, $endTimeParam);
         }
 
         flash($id ? 'Subject updated.' : (count($days) > 1 ? 'Subject created for ' . count($days) . ' days.' : 'Subject created.'), 'success');

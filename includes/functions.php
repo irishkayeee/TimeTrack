@@ -540,41 +540,48 @@ function ensureClassJoinCode($mysqli, $subjectId) {
         return $ref['join_code'];
     }
 
-    // A sibling day-row for the same class may already have a code.
+    // A sibling day-row for the same class may already carry the code. join_code is
+    // UNIQUE across the whole table, and joining by code only needs ONE row in the
+    // group to have it (it then finds every sibling via teacher_id + room_id + code,
+    // not via join_code) — so just return the sibling's code as-is. Writing that same
+    // value onto this row too would collide with the sibling and violate the constraint.
     $siblingStmt = $mysqli->prepare('SELECT join_code FROM subjects WHERE teacher_id <=> ? AND room_id = ? AND code = ? AND join_code IS NOT NULL LIMIT 1');
     $siblingStmt->bind_param('iis', $ref['teacher_id'], $ref['room_id'], $ref['code']);
     $siblingStmt->execute();
     $siblingRow = $siblingStmt->get_result()->fetch_assoc();
     $siblingStmt->close();
 
-    $joinCode = $siblingRow['join_code'] ?? null;
-
-    if (!$joinCode) {
-        $alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-        $max = strlen($alphabet) - 1;
-        for ($attempt = 0; $attempt < 10; $attempt++) {
-            $candidate = '';
-            for ($i = 0; $i < 6; $i++) {
-                $candidate .= $alphabet[random_int(0, $max)];
-            }
-            $check = $mysqli->prepare('SELECT id FROM subjects WHERE join_code = ? LIMIT 1');
-            $check->bind_param('s', $candidate);
-            $check->execute();
-            $check->store_result();
-            $isUnique = $check->num_rows === 0;
-            $check->close();
-            if ($isUnique) {
-                $joinCode = $candidate;
-                break;
-            }
-        }
-        if (!$joinCode) {
-            return null;
-        }
+    if ($siblingRow && $siblingRow['join_code']) {
+        return $siblingRow['join_code'];
     }
 
-    $updateStmt = $mysqli->prepare('UPDATE subjects SET join_code = ? WHERE teacher_id <=> ? AND room_id = ? AND code = ?');
-    $updateStmt->bind_param('siis', $joinCode, $ref['teacher_id'], $ref['room_id'], $ref['code']);
+    $joinCode = null;
+    $alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    $max = strlen($alphabet) - 1;
+    for ($attempt = 0; $attempt < 10; $attempt++) {
+        $candidate = '';
+        for ($i = 0; $i < 6; $i++) {
+            $candidate .= $alphabet[random_int(0, $max)];
+        }
+        $check = $mysqli->prepare('SELECT id FROM subjects WHERE join_code = ? LIMIT 1');
+        $check->bind_param('s', $candidate);
+        $check->execute();
+        $check->store_result();
+        $isUnique = $check->num_rows === 0;
+        $check->close();
+        if ($isUnique) {
+            $joinCode = $candidate;
+            break;
+        }
+    }
+    if (!$joinCode) {
+        return null;
+    }
+
+    // Only this row gets the newly generated code — no other row in the group has
+    // one yet, so there's nothing to collide with.
+    $updateStmt = $mysqli->prepare('UPDATE subjects SET join_code = ? WHERE id = ?');
+    $updateStmt->bind_param('si', $joinCode, $subjectId);
     $updateStmt->execute();
     $updateStmt->close();
 
@@ -953,6 +960,35 @@ function deleteStudentRecord($mysqli, $studentDbId, $allowedRoomIds = null) {
     $stmt->execute();
     $stmt->close();
     return true;
+}
+
+function notifyTeacherOfScheduleChange($mysqli, $teacherId, $code, $name, $days, $startTime, $endTime = null) {
+    $stmt = $mysqli->prepare('SELECT first_name, last_name, email FROM teachers WHERE id = ? LIMIT 1');
+    $stmt->bind_param('i', $teacherId);
+    $stmt->execute();
+    $teacher = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    if (!$teacher) {
+        return;
+    }
+
+    $teacherName = trim($teacher['first_name'] . ' ' . $teacher['last_name']);
+    $dayList = implode(', ', $days);
+    $timeLabel = formatTime($startTime) . ($endTime ? ' - ' . formatTime($endTime) : '');
+    $subjectLabel = $name . ' (' . $code . ')';
+
+    $message = 'The schedule for ' . $subjectLabel . ' has been updated. It is now on ' . $dayList . ' at ' . $timeLabel . '.';
+    notifyTeacher($teacherId, 'schedule_update', 'Class Schedule Updated', $message, null);
+
+    if (!empty($teacher['email']) && isMailConfigured()) {
+        $subject = 'Schedule Updated: ' . $subjectLabel;
+        $body = '<p>Hi ' . htmlspecialchars($teacherName) . ',</p>'
+            . '<p>The schedule for <strong>' . htmlspecialchars($subjectLabel) . '</strong> has been updated. It is now on '
+            . '<strong>' . htmlspecialchars($dayList) . '</strong> at <strong>' . htmlspecialchars($timeLabel) . '</strong>.</p>'
+            . '<p>Please review the updated schedule in the Teacher Portal.</p>'
+            . '<p>— TimeTrack Attendance System</p>';
+        sendMail($teacher['email'], $teacherName, $subject, $body);
+    }
 }
 
 function renderTeacherClassHeader($subject, $activeTab) {
