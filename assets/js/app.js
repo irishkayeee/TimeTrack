@@ -11,12 +11,27 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
+function playBeep(frequency, duration) {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return;
+    const ctx = new AudioContextClass();
+    const oscillator = ctx.createOscillator();
+    const gain = ctx.createGain();
+    oscillator.type = 'sine';
+    oscillator.frequency.value = frequency;
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
+    oscillator.connect(gain);
+    gain.connect(ctx.destination);
+    oscillator.start();
+    oscillator.stop(ctx.currentTime + duration);
+    oscillator.onended = () => ctx.close();
+}
+
 function playSuccess() {
-    const audio = new Audio('https://actions.google.com/sounds/v1/cartoon/slide_whistle.ogg');
-    audio.play();
+    playBeep(880, 0.12);
 }
 
 function playError() {
-    const audio = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg');
-    audio.play();
+    playBeep(300, 0.18);
 }
