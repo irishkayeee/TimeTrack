@@ -70,7 +70,7 @@ if ($activeSubject) {
     foreach ($scannedRows as &$r) {
         $r['lateMinutes'] = null;
         if ($r['status'] === 'late') {
-            $r['lateMinutes'] = max(0, round((strtotime($r['time']) - strtotime($activeSubject['start_time'])) / 60));
+            $r['lateMinutes'] = minutesLate($activeSubject['start_time'], $r['time']);
         }
     }
     unset($r);
@@ -156,15 +156,15 @@ if ($isTeacherView) {
                 <div class="d-flex flex-nowrap gap-2 mt-3 sp-scroll-x">
                     <div class="sp-policy-item mb-0">
                         <span class="sp-policy-dot bg-success"></span>
-                        <span><?php echo $hasCustomPolicy ? 'Before ' . formatTime($policyTimes['late']) : 'On time'; ?>: <strong>Present</strong></span>
+                        <span><?php echo 'Until ' . formatTime($hasCustomPolicy ? date('H:i:s', strtotime($policyTimes['late']) - 60) : $activeSession['start']); ?>: <strong>Present</strong></span>
                     </div>
                     <div class="sp-policy-item mb-0">
                         <span class="sp-policy-dot bg-warning"></span>
-                        <span><?php echo $hasCustomPolicy ? 'From ' . formatTime($policyTimes['late']) : 'After start'; ?>: <strong>Late</strong></span>
+                        <span><?php echo formatTime($hasCustomPolicy ? $policyTimes['late'] : date('H:i:s', strtotime($activeSession['start']) + 60)) . ' – ' . formatTime(date('H:i:s', strtotime($policyTimes['absent']) - 60)); ?>: <strong>Late</strong></span>
                     </div>
                     <div class="sp-policy-item mb-0">
                         <span class="sp-policy-dot bg-danger"></span>
-                        <span><?php echo $policyTimes ? 'From ' . formatTime($policyTimes['absent']) : 'After cutoff'; ?>: <strong>Absent</strong></span>
+                        <span>From <?php echo formatTime($policyTimes['absent']); ?>: <strong>Absent</strong></span>
                     </div>
                 </div>
             </div>
@@ -198,7 +198,7 @@ if ($isTeacherView) {
                                     </td>
                                     <td><?php echo htmlspecialchars($r['first_name'] . ' ' . $r['last_name']); ?></td>
                                     <td><?php echo htmlspecialchars($r['student_id']); ?></td>
-                                    <td><?php echo badgeStatus($r['status']); ?><?php if ($r['lateMinutes'] !== null): ?> <span class="text-muted small">(<?php echo $r['lateMinutes']; ?> min)</span><?php endif; ?></td>
+                                    <td><?php echo badgeStatus($r['status']); ?><?php if ($r['lateMinutes'] !== null): ?> <span class="sp-late-min"><?php echo $r['lateMinutes']; ?> min late</span><?php endif; ?></td>
                                     <td><?php echo formatTime($r['time']); ?></td>
                                 </tr>
                             <?php endforeach; ?>
@@ -259,7 +259,13 @@ function applyScannedFilters() {
 if (scannedSearch) scannedSearch.addEventListener('input', applyScannedFilters);
 if (scannedStatusFilter) scannedStatusFilter.addEventListener('change', applyScannedFilters);
 
-function addScannedRow(data, statusLabel) {
+function lateMinutesHtml(statusLabel, lateMinutes) {
+    return statusLabel === 'late' && lateMinutes !== null && lateMinutes !== undefined
+        ? ' <span class="sp-late-min">' + lateMinutes + ' min late</span>'
+        : '';
+}
+
+function addScannedRow(data, statusLabel, lateMinutes) {
     if (!scannedTableBody || !data) {
         return;
     }
@@ -280,7 +286,7 @@ function addScannedRow(data, statusLabel) {
         <td>${photoHtml}</td>
         <td>${data.first_name} ${data.last_name}</td>
         <td>${data.student_id}</td>
-        <td>${badgeMap[statusLabel] || '<span class="badge bg-secondary">' + statusLabel + '</span>'}</td>
+        <td>${badgeMap[statusLabel] || '<span class="badge bg-secondary">' + statusLabel + '</span>'}${lateMinutesHtml(statusLabel, lateMinutes)}</td>
         <td>${timeLabel}</td>
     `;
     scannedTableBody.prepend(row);
@@ -291,7 +297,7 @@ function addScannedRow(data, statusLabel) {
     applyScannedFilters();
 }
 
-function showScanResult(data, statusLabel) {
+function showScanResult(data, statusLabel, lateMinutes) {
     const badgeMap = {
         present: '<span class="badge bg-success">Present</span>',
         late: '<span class="badge bg-warning">Late</span>',
@@ -313,7 +319,7 @@ function showScanResult(data, statusLabel) {
             ${photoHtml}
             <div class="flex-grow-1">
                 <div class="d-flex align-items-center gap-2">
-                    <strong>${data.first_name} ${data.last_name}</strong> ${statusBadge}
+                    <strong>${data.first_name} ${data.last_name}</strong> ${statusBadge}${lateMinutesHtml(statusLabel, lateMinutes)}
                 </div>
                 <div class="text-muted small">ID: ${data.student_id}</div>
                 <div class="text-muted small">${data.course_code || 'N/A'} &middot; ${data.room_name || 'N/A'}</div>
@@ -363,8 +369,8 @@ async function submitScan(qrValue) {
         });
         const result = await response.json();
         if (result.status === 'success') {
-            showScanResult(result.student, result.statusLabel);
-            addScannedRow(result.student, result.statusLabel);
+            showScanResult(result.student, result.statusLabel, result.lateMinutes);
+            addScannedRow(result.student, result.statusLabel, result.lateMinutes);
             playSuccess();
             return true;
         }

@@ -684,6 +684,68 @@ function todaysSessionTimes($mysqli, $subject) {
         : ['start' => $subject['start_time'], 'end' => $subject['end_time']];
 }
 
+// Whole minutes a scan is past the class start (used for "Late (X min)").
+function minutesLate($startTime, $scanTime) {
+    return max(0, (int) floor((strtotime($scanTime) - strtotime($startTime)) / 60));
+}
+
+// Re-scores today's records for a class (all its meeting-day rows) after its schedule
+// or attendance policy changes, so a scan saved under the old times doesn't stay
+// wrong. Real scans are re-graded from their scan time; auto-absent rows are removed
+// if the new absent time hasn't been reached yet (the roster shows them as pending
+// again). Older rows saved with scan_type 'absent' are only re-graded when they
+// were clearly real scans (timed before the class start).
+function recalculateTodaysAttendance($mysqli, $teacherId, $roomId, $code) {
+    $stmt = $mysqli->prepare('SELECT id, day_of_week, start_time, end_time, absent_cutoff_minutes, late_after_minutes, absent_after_minutes FROM subjects WHERE teacher_id <=> ? AND room_id = ? AND code = ?');
+    $stmt->bind_param('iis', $teacherId, $roomId, $code);
+    $stmt->execute();
+    $subjects = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    $stmt->close();
+
+    $today = date('D');
+    $now = date('H:i:s');
+    foreach ($subjects as $subject) {
+        $session = todaysSessionTimes($mysqli, $subject);
+        $isMakeupToday = $session['start'] !== $subject['start_time'] || $session['end'] !== $subject['end_time'];
+        if ($subject['day_of_week'] !== $today && !$isMakeupToday) {
+            continue;
+        }
+        $policyTimes = attendancePolicyTimes($subject, $session['start'], $session['end']);
+
+        $rowsStmt = $mysqli->prepare('SELECT id, status, scan_type, time FROM attendance WHERE subject_id = ? AND date = CURDATE()');
+        $rowsStmt->bind_param('i', $subject['id']);
+        $rowsStmt->execute();
+        $rows = $rowsStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+        $rowsStmt->close();
+
+        foreach ($rows as $row) {
+            if ($row['scan_type'] === 'auto') {
+                if (strtotime($now) < strtotime($policyTimes['absent'])) {
+                    $del = $mysqli->prepare('DELETE FROM attendance WHERE id = ?');
+                    $del->bind_param('i', $row['id']);
+                    $del->execute();
+                    $del->close();
+                }
+                continue;
+            }
+            // Older rows saved as scan_type 'absent' are usually auto-absences, but one
+            // timed before the class even started can only have been a real scan.
+            $isScan = in_array($row['scan_type'], ['qr', 'present', 'late'], true)
+                || ($row['scan_type'] === 'absent' && strtotime($row['time']) < strtotime($session['start']));
+            if (!$isScan) {
+                continue;
+            }
+            $newStatus = computeAttendanceStatus($subject, $session['start'], $session['end'], $row['time']);
+            if ($newStatus !== $row['status']) {
+                $upd = $mysqli->prepare("UPDATE attendance SET status = ?, scan_type = 'qr' WHERE id = ?");
+                $upd->bind_param('si', $newStatus, $row['id']);
+                $upd->execute();
+                $upd->close();
+            }
+        }
+    }
+}
+
 function computeAttendanceStatus($subject, $startTime, $endTime, $scanTime) {
     $times = attendancePolicyTimes($subject, $startTime, $endTime);
     $scanTs = strtotime($scanTime);
@@ -754,7 +816,7 @@ function finalizeAbsencesForSubject($mysqli, $subject) {
 
     $nowTime = date('H:i:s');
     foreach ($noShows as $student) {
-        $insert = $mysqli->prepare('INSERT INTO attendance (student_id, course_id, room_id, subject_id, status, scan_type, date, time, created_at) VALUES (?, ?, ?, ?, "absent", "absent", CURDATE(), ?, NOW())');
+        $insert = $mysqli->prepare('INSERT INTO attendance (student_id, course_id, room_id, subject_id, status, scan_type, date, time, created_at) VALUES (?, ?, ?, ?, "absent", "auto", CURDATE(), ?, NOW())');
         $insert->bind_param('iiiis', $student['id'], $student['course_id'], $student['room_id'], $subject['id'], $nowTime);
         $insert->execute();
         $insert->close();

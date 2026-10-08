@@ -147,6 +147,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
+        recalculateTodaysAttendance($mysqli, $teacherId, (int) $ref['room_id'], $ref['code']);
         flash('Schedule updated.', 'success');
         redirect('subjects.php');
     }
@@ -179,6 +180,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $upd->bind_param('iiiis', $lateAfter, $absentAfter, $teacherId, $ref['room_id'], $ref['code']);
         $upd->execute();
         $upd->close();
+
+        recalculateTodaysAttendance($mysqli, $teacherId, (int) $ref['room_id'], $ref['code']);
 
         flash('Attendance policy updated.', 'success');
         redirect('subjects.php');
@@ -986,8 +989,10 @@ document.addEventListener('DOMContentLoaded', function () {
         const late = policyLateField.value, absent = policyAbsentField.value;
         policyLateField.setCustomValidity(late && toMinutes(late) <= toMinutes(policyStart) ? 'Late time must be after the class start.' : '');
         policyAbsentField.setCustomValidity(late && absent && toMinutes(absent) <= toMinutes(late) ? 'Absent time must be after the Late time.' : '');
-        document.getElementById('policyTlPresent').textContent = late ? to12h(policyStart) + ' – ' + to12h(late) : '—';
-        document.getElementById('policyTlLate').textContent = (late && absent) ? to12h(late) + ' – ' + to12h(absent) : '—';
+        // Ranges are inclusive: a minute belongs to the earlier status until the next one starts.
+        const minuteBefore = t => fromMinutes(toMinutes(t) - 1);
+        document.getElementById('policyTlPresent').textContent = late ? to12h(policyStart) + ' – ' + to12h(minuteBefore(late)) : '—';
+        document.getElementById('policyTlLate').textContent = (late && absent) ? to12h(late) + ' – ' + to12h(minuteBefore(absent)) : '—';
         document.getElementById('policyTlAbsent').textContent = absent ? 'from ' + to12h(absent) : '—';
     }
     [policyLateField, policyAbsentField].forEach(field => {

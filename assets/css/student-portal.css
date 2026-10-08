@@ -3665,3 +3665,16 @@ a.sp-risk-name {
     pointer-events: none;
     opacity: 0.75;
 }
+
+/* "X min late" next to a Late badge on the scanner */
+.sp-late-min {
+    display: inline-block;
+    margin-left: 0.3rem;
+    padding: 0.1rem 0.45rem;
+    border-radius: 999px;
+    background: rgba(224, 139, 29, 0.12);
+    color: #a35f00;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+}

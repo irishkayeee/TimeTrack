@@ -104,15 +104,17 @@ $scanTime = date('H:i:s');
 $status = computeAttendanceStatus($subject, $effectiveStartTime, $effectiveEndTime, $scanTime);
 
 $stmt = $mysqli->prepare('INSERT INTO attendance (student_id, course_id, room_id, subject_id, status, scan_type, date, time, created_at) VALUES (?, ?, ?, ?, ?, ?, CURDATE(), ?, NOW())');
-$stmt->bind_param('iiiisss', $student['id'], $student['course_id'], $student['room_id'], $subjectId, $status, $status, $scanTime);
+$scanType = 'qr';
+$stmt->bind_param('iiiisss', $student['id'], $student['course_id'], $student['room_id'], $subjectId, $status, $scanType, $scanTime);
 $stmt->execute();
 $stmt->close();
 
 $notifTitles = ['present' => 'Attendance Recorded', 'late' => 'Marked Late', 'absent' => 'Marked Absent'];
-$notifMessage = 'You were marked ' . $status . ' in ' . $subject['name'] . ' today.';
+$lateMinutes = $status === 'late' ? minutesLate($effectiveStartTime, $scanTime) : null;
+$notifMessage = 'You were marked ' . $status . ($lateMinutes !== null ? ' (' . $lateMinutes . ' min late)' : '') . ' in ' . $subject['name'] . ' today.';
 notifyStudent($student['id'], $status, $notifTitles[$status] ?? 'Attendance Recorded', $notifMessage, $subjectId);
 
 notifyGuardianOfAttendance($student, $subject['name'], $status, $scanTime);
 
 logActivity($_SESSION['user']['id'] ?? 0, 'Scanned QR for student ' . $student['student_id']);
-echo json_encode(['status' => 'success', 'message' => 'Attendance saved.', 'student' => $student, 'statusLabel' => $status]);
+echo json_encode(['status' => 'success', 'message' => 'Attendance saved.', 'student' => $student, 'statusLabel' => $status, 'lateMinutes' => $lateMinutes]);
