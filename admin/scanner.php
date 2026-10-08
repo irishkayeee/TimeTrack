@@ -79,7 +79,9 @@ if ($activeSubject) {
     $totalStudents = count($roster['rows']);
 }
 $scannedTotal = count($scannedRows);
-$absentCutoff = $activeSubject ? effectiveAbsentCutoff($activeSubject) : intval(getSetting('absent_cutoff_minutes', 20));
+$activeSession = $activeSubject ? todaysSessionTimes($mysqli, $activeSubject) : null;
+$policyTimes = $activeSubject ? attendancePolicyTimes($activeSubject, $activeSession['start'], $activeSession['end']) : null;
+$hasCustomPolicy = $activeSubject && hasCustomAttendanceTimes($activeSubject);
 
 $isTeacherView = $user['role'] === 'teacher';
 if ($isTeacherView) {
@@ -151,18 +153,18 @@ if ($isTeacherView) {
                 <div class="mt-3">
                     <div id="scanResult" class="d-none"></div>
                 </div>
-                <div class="d-flex flex-nowrap gap-2 mt-3" style="overflow-x: auto;">
+                <div class="d-flex flex-nowrap gap-2 mt-3 sp-scroll-x">
                     <div class="sp-policy-item mb-0">
                         <span class="sp-policy-dot bg-success"></span>
-                        <span>On time: <strong>Present</strong></span>
+                        <span><?php echo $hasCustomPolicy ? 'Before ' . formatTime($policyTimes['late']) : 'On time'; ?>: <strong>Present</strong></span>
                     </div>
                     <div class="sp-policy-item mb-0">
                         <span class="sp-policy-dot bg-warning"></span>
-                        <span>Until class ends: <strong>Late</strong></span>
+                        <span><?php echo $hasCustomPolicy ? 'From ' . formatTime($policyTimes['late']) : 'After start'; ?>: <strong>Late</strong></span>
                     </div>
                     <div class="sp-policy-item mb-0">
                         <span class="sp-policy-dot bg-danger"></span>
-                        <span><?php echo $absentCutoff; ?>+ min after end: <strong>Absent</strong></span>
+                        <span><?php echo $policyTimes ? 'From ' . formatTime($policyTimes['absent']) : 'After cutoff'; ?>: <strong>Absent</strong></span>
                     </div>
                 </div>
             </div>

@@ -9,9 +9,9 @@
                 <div class="sp-logout-icon mb-3"><i class="fa-solid fa-right-from-bracket"></i></div>
                 <h6 class="mb-1">Log out?</h6>
                 <p class="text-muted small mb-4">You'll need to sign in again to access your account.</p>
-                <div class="d-flex gap-2 justify-content-center">
-                    <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">Cancel</button>
-                    <a href="../logout.php" class="btn btn-danger rounded-pill px-4">Logout</a>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-outline-secondary rounded-pill flex-fill" data-bs-dismiss="modal">Cancel</button>
+                    <a href="../logout.php" class="btn btn-danger rounded-pill flex-fill">Logout</a>
                 </div>
             </div>
         </div>

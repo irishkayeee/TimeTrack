@@ -79,7 +79,7 @@ require_once __DIR__ . '/../includes/admin_header.php';
     <div class="col-lg-4">
         <div class="card p-4 text-center h-100 sp-profile-card">
             <div class="sp-profile-photo-wrap mx-auto">
-                <div class="sp-profile-photo sp-profile-photo-fallback"><i class="fa-solid fa-user"></i></div>
+                <div class="sp-profile-photo sp-profile-photo-fallback sp-profile-initials"><?php echo htmlspecialchars(nameInitials($account['username'])); ?></div>
             </div>
             <h5 class="mt-3 mb-0"><?php echo htmlspecialchars($account['username']); ?></h5>
             <p class="text-muted mb-2"><?php echo htmlspecialchars(ucfirst($account['role'])); ?></p>

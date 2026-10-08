@@ -30,7 +30,7 @@ $navItems = [
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/datatables.net-bs5/2.3.8/dataTables.bootstrap5.min.css" />
     <link rel="stylesheet" href="../assets/css/theme-tokens.css">
     <link rel="stylesheet" href="../assets/css/dashboard-theme.css">
-    <link rel="stylesheet" href="../assets/css/student-portal.css">
+    <link rel="stylesheet" href="../assets/css/student-portal.css?v=<?php echo filemtime(__DIR__ . '/../assets/css/student-portal.css'); ?>">
 </head>
 <body class="student-body">
 <div class="sp-shell" id="spShell">
@@ -56,14 +56,14 @@ $navItems = [
                 </a>
             <?php endforeach; ?>
         </nav>
-        <div class="sp-sidebar-illustration">
-            <img src="../assets/images/sidebar.png" alt="">
-        </div>
         <div class="sp-nav-footer">
             <a href="#" class="sp-nav-link" data-bs-toggle="modal" data-bs-target="#logoutConfirmModal">
                 <span class="sp-nav-icon"><i class="fa-solid fa-right-from-bracket"></i></span>
                 <span class="sp-nav-label">Logout</span>
             </a>
+        </div>
+        <div class="sp-sidebar-illustration">
+            <img src="../assets/images/sidebar.png" alt="">
         </div>
     </aside>
     <div class="sp-main">
@@ -84,7 +84,7 @@ $navItems = [
                     <?php if ($sidebarStudent && $sidebarStudent['photo']): ?>
                         <img src="../<?php echo htmlspecialchars($sidebarStudent['photo']); ?>" alt="">
                     <?php else: ?>
-                        <i class="fa-solid fa-circle-user fa-2x text-secondary"></i>
+                        <span class="sp-user-initials"><?php echo htmlspecialchars($sidebarStudent ? nameInitials($sidebarStudent['first_name'], $sidebarStudent['last_name']) : 'S'); ?></span>
                     <?php endif; ?>
                     <div>
                         <div class="sp-user-name"><?php echo htmlspecialchars($sidebarStudent ? $sidebarStudent['first_name'] . ' ' . $sidebarStudent['last_name'] : 'Student'); ?></div>

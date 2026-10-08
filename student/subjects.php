@@ -107,7 +107,7 @@ while ($row = $result->fetch_assoc()) {
 $stmt->close();
 
 function renderSubjectCard($row, $qrToken, $studentName = '', $studentCourseYear = '') {
-    $theme = subjectTheme($row['id']);
+    $theme = subjectTheme($row);
 
     $qrText = subjectQrText($qrToken, $row['id']);
     $qrFilename = 'qr_' . preg_replace('/[^A-Za-z0-9_-]/', '_', $qrToken) . '_subj' . $row['id'] . '.png';
@@ -123,7 +123,7 @@ function renderSubjectCard($row, $qrToken, $studentName = '', $studentCourseYear
     ?>
     <div class="col-md-4 sp-subject-col" data-search="<?php echo htmlspecialchars(strtolower($row['code'] . ' ' . $row['name'] . ' ' . $row['teacher_name'])); ?>">
         <div class="sp-subject-card">
-            <div class="sp-subject-band" style="background: <?php echo $theme['color']; ?>;">
+            <div class="sp-subject-band <?php echo $theme['band_class']; ?>" style="<?php echo $theme['band_style']; ?>">
                 <i class="fa-solid <?php echo $theme['icon']; ?> sp-subject-icon"></i>
                 <span class="sp-subject-code"><?php echo htmlspecialchars($row['code']); ?></span>
                 <span class="sp-subject-name"><?php echo htmlspecialchars($row['name']); ?></span>

@@ -152,8 +152,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($_POST['action'] === 'save_policy') {
         $id = intval($_POST['id'] ?? 0);
-        $useDefault = isset($_POST['use_default']);
-        $cutoff = $useDefault ? null : max(1, intval($_POST['absent_cutoff_minutes'] ?? 20));
+
+        $refStmt = $mysqli->prepare('SELECT code, room_id, start_time FROM subjects WHERE id = ? AND teacher_id = ? LIMIT 1');
+        $refStmt->bind_param('ii', $id, $teacherId);
+        $refStmt->execute();
+        $ref = $refStmt->get_result()->fetch_assoc();
+        $refStmt->close();
+
+        if (!$ref) {
+            flash('Class not found.', 'danger');
+            redirect('subjects.php');
+        }
+
+        // The picked clock times are stored as minutes after this class's start time.
+        $startTs = strtotime($ref['start_time']);
+        $lateTs = strtotime($_POST['late_time'] ?? '');
+        $absentTs = strtotime($_POST['absent_time'] ?? '');
+        if ($lateTs === false || $absentTs === false || $lateTs <= $startTs || $absentTs <= $lateTs) {
+            flash('Late time must be after the class start (' . formatTime($ref['start_time']) . '), and Absent time must be after the Late time.', 'danger');
+            redirect('subjects.php');
+        }
+        $lateAfter = intval(round(($lateTs - $startTs) / 60));
+        $absentAfter = intval(round(($absentTs - $startTs) / 60));
+
+        $upd = $mysqli->prepare('UPDATE subjects SET late_after_minutes = ?, absent_after_minutes = ? WHERE teacher_id = ? AND room_id = ? AND code = ?');
+        $upd->bind_param('iiiis', $lateAfter, $absentAfter, $teacherId, $ref['room_id'], $ref['code']);
+        $upd->execute();
+        $upd->close();
+
+        flash('Attendance policy updated.', 'success');
+        redirect('subjects.php');
+    }
+    if ($_POST['action'] === 'save_cover') {
+        $id = intval($_POST['id'] ?? 0);
+        $coverColor = $_POST['cover_color'] ?? '';
+        $coverPattern = $_POST['cover_pattern'] ?? '';
+        if (!isset(subjectCoverColors()[$coverColor]) || !isset(subjectCoverPatterns()[$coverPattern])) {
+            flash('Please pick a valid cover color and design.', 'danger');
+            redirect('subjects.php');
+        }
 
         $refStmt = $mysqli->prepare('SELECT code, room_id FROM subjects WHERE id = ? AND teacher_id = ? LIMIT 1');
         $refStmt->bind_param('ii', $id, $teacherId);
@@ -166,12 +203,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             redirect('subjects.php');
         }
 
-        $upd = $mysqli->prepare('UPDATE subjects SET absent_cutoff_minutes = ? WHERE teacher_id = ? AND room_id = ? AND code = ?');
-        $upd->bind_param('iiis', $cutoff, $teacherId, $ref['room_id'], $ref['code']);
+        // Apply to every day-row of this class so the card looks the same all week
+        $upd = $mysqli->prepare('UPDATE subjects SET cover_color = ?, cover_pattern = ? WHERE teacher_id = ? AND room_id = ? AND code = ?');
+        $upd->bind_param('ssiis', $coverColor, $coverPattern, $teacherId, $ref['room_id'], $ref['code']);
         $upd->execute();
         $upd->close();
 
-        flash('Attendance policy updated.', 'success');
+        flash('Class cover updated.', 'success');
         redirect('subjects.php');
     }
     if ($_POST['action'] === 'save_subject_room') {
@@ -472,52 +510,55 @@ $allRooms = $allRoomsStmt->fetch_all(MYSQLI_ASSOC);
 
 require_once __DIR__ . '/../includes/teacher_header.php';
 ?>
+<?php $averageAttendanceBar = min(100, max(0, $averageAttendance)); ?>
 <div class="row g-3 mb-3">
     <div class="col-md-3">
-        <div class="card p-3 sp-mc-stat">
-            <div class="sp-mc-stat-icon" style="background: var(--lp-pale-green); color: var(--lp-dark-green);"><i class="fa-solid fa-book"></i></div>
-            <div>
-                <div class="sp-mc-stat-value"><?php echo $totalClasses; ?></div>
-                <div class="sp-mc-stat-label">Total Classes</div>
+        <div class="stat-card-v2 stat-card-v2--green stat-card-v2--compact">
+            <div class="stat-card-v2__top">
+                <span class="stat-card-v2__icon"><i class="fa-solid fa-book"></i></span>
+                <span class="stat-card-v2__label">Total Classes</span>
             </div>
+            <div class="stat-card-v2__value"><?php echo $totalClasses; ?></div>
+            <div class="stat-card-v2__sublabel">Assigned to you</div>
         </div>
     </div>
     <div class="col-md-3">
-        <div class="card p-3 sp-mc-stat">
-            <div class="sp-mc-stat-icon" style="background: #ece6fb; color: #6f42c1;"><i class="fa-solid fa-users"></i></div>
-            <div>
-                <div class="sp-mc-stat-value"><?php echo $totalStudentsAllTime; ?></div>
-                <div class="sp-mc-stat-label">Total Students</div>
+        <div class="stat-card-v2 stat-card-v2--purple stat-card-v2--compact">
+            <div class="stat-card-v2__top">
+                <span class="stat-card-v2__icon"><i class="fa-solid fa-users"></i></span>
+                <span class="stat-card-v2__label">Total Students</span>
             </div>
+            <div class="stat-card-v2__value"><?php echo $totalStudentsAllTime; ?></div>
+            <div class="stat-card-v2__sublabel">Across all classes</div>
         </div>
     </div>
     <div class="col-md-3">
-        <div class="card p-3 sp-mc-stat">
-            <div class="sp-mc-stat-icon" style="background: #dbe8fb; color: #2f6fed;"><i class="fa-solid fa-chart-line"></i></div>
-            <div>
-                <div class="sp-mc-stat-value"><?php echo $averageAttendance; ?>%</div>
-                <div class="sp-mc-stat-label">Average Attendance</div>
+        <div class="stat-card-v2 stat-card-v2--blue stat-card-v2--compact">
+            <div class="stat-card-v2__top">
+                <span class="stat-card-v2__icon"><i class="fa-solid fa-chart-line"></i></span>
+                <span class="stat-card-v2__label">Average Attendance</span>
             </div>
+            <div class="stat-card-v2__value"><?php echo $averageAttendance; ?>%</div>
+            <div class="stat-card-v2__progress"><div class="stat-card-v2__progress-bar" style="width: <?php echo $averageAttendanceBar; ?>%"></div></div>
+            <div class="stat-card-v2__sublabel">Across all sessions</div>
         </div>
     </div>
     <div class="col-md-3">
-        <div class="card p-3 sp-mc-stat">
-            <div class="sp-mc-stat-icon" style="background: #fdeedd; color: #e08b1d;"><i class="fa-solid fa-calendar-day"></i></div>
-            <div>
-                <div class="sp-mc-stat-value"><?php echo $todayCount; ?></div>
-                <div class="sp-mc-stat-label">Today's Classes</div>
+        <div class="stat-card-v2 stat-card-v2--orange stat-card-v2--compact">
+            <div class="stat-card-v2__top">
+                <span class="stat-card-v2__icon"><i class="fa-solid fa-calendar-day"></i></span>
+                <span class="stat-card-v2__label">Today's Classes</span>
             </div>
+            <div class="stat-card-v2__value"><?php echo $todayCount; ?></div>
+            <div class="stat-card-v2__sublabel"><?php echo date('l'); ?></div>
         </div>
     </div>
-</div>
-<div class="d-flex justify-content-end mb-3">
-    <button type="button" class="btn btn-primary rounded-pill" data-bs-toggle="modal" data-bs-target="#createClassModal"><i class="fa-solid fa-plus me-1"></i> Create Class</button>
 </div>
 <div class="card p-3 mb-3">
     <div class="sp-mc-toolbar">
         <div class="sp-mc-search">
             <i class="fa-solid fa-magnifying-glass"></i>
-            <input type="text" id="mcSearchInput" placeholder="Search class by name or code...">
+            <input type="text" id="mcSearchInput" placeholder="Search by class name or code...">
         </div>
         <form method="get" class="d-flex align-items-center gap-2 mb-0 flex-wrap">
             <select class="form-select form-select-sm sp-filter-select" name="course_id" onchange="this.form.submit()" style="width:auto;" title="Filter by program">
@@ -526,8 +567,8 @@ require_once __DIR__ . '/../includes/teacher_header.php';
                     <option value="<?php echo $optId; ?>" <?php echo $courseFilter === $optId ? 'selected' : ''; ?>><?php echo htmlspecialchars($optLabel); ?></option>
                 <?php endforeach; ?>
             </select>
-            <select class="form-select form-select-sm sp-filter-select" name="room_id" onchange="this.form.submit()" style="width:auto;" title="Filter by block">
-                <option value="0">All Blocks</option>
+            <select class="form-select form-select-sm sp-filter-select" name="room_id" onchange="this.form.submit()" style="width:auto;" title="Filter by room">
+                <option value="0">All Rooms</option>
                 <?php foreach ($blockOptions as $optId => $optLabel): ?>
                     <option value="<?php echo $optId; ?>" <?php echo $roomFilter === $optId ? 'selected' : ''; ?>><?php echo htmlspecialchars($optLabel); ?></option>
                 <?php endforeach; ?>
@@ -542,6 +583,7 @@ require_once __DIR__ . '/../includes/teacher_header.php';
             <button type="button" class="active" id="mcGridBtn" title="Grid view"><i class="fa-solid fa-table-cells-large"></i></button>
             <button type="button" id="mcListBtn" title="List view"><i class="fa-solid fa-list"></i></button>
         </div>
+        <button type="button" class="btn btn-primary rounded-pill sp-mc-create-btn" data-bs-toggle="modal" data-bs-target="#createClassModal"><i class="fa-solid fa-plus me-1"></i> Create Class</button>
     </div>
 </div>
 
@@ -549,10 +591,10 @@ require_once __DIR__ . '/../includes/teacher_header.php';
     <div class="alert alert-info">No classes found for this filter.</div>
 <?php else: ?>
     <div class="row g-3 sp-classes-grid" id="mcGrid">
-        <?php foreach ($cardGroups as $group): $theme = subjectTheme($group['id']); ?>
+        <?php foreach ($cardGroups as $group): $theme = subjectTheme($group); ?>
             <div class="col-lg-4 col-md-6 sp-mc-col" data-search="<?php echo htmlspecialchars(strtolower($group['name'] . ' ' . $group['code'])); ?>">
                 <div class="sp-subject-card">
-                    <div class="sp-subject-band" style="background: <?php echo $theme['color']; ?>;">
+                    <div class="sp-subject-band <?php echo $theme['band_class']; ?>" style="<?php echo $theme['band_style']; ?>">
                         <i class="fa-solid <?php echo $theme['icon']; ?> sp-subject-icon"></i>
                         <span class="sp-subject-code"><?php echo htmlspecialchars($group['code']); ?></span>
                         <span class="sp-subject-name"><?php echo htmlspecialchars($group['name']); ?></span>
@@ -570,6 +612,7 @@ require_once __DIR__ . '/../includes/teacher_header.php';
                                     <li><button class="dropdown-item btn-edit-schedule" type="button" data-data='<?php echo json_encode($group); ?>'><i class="fa-solid fa-calendar-days"></i> Edit Schedule</button></li>
                                     <li><button class="dropdown-item btn-edit-policy" type="button" data-data='<?php echo json_encode($group); ?>'><i class="fa-solid fa-shield-halved"></i> Edit Attendance Policy</button></li>
                                     <li><button class="dropdown-item btn-edit-subject-room" type="button" data-data='<?php echo json_encode($group); ?>'><i class="fa-solid fa-door-open"></i> Edit Subject Room</button></li>
+                                    <li><button class="dropdown-item btn-edit-cover" type="button" data-id="<?php echo (int) $group['id']; ?>" data-code="<?php echo htmlspecialchars($group['code']); ?>" data-name="<?php echo htmlspecialchars($group['name']); ?>" data-icon="<?php echo $theme['icon']; ?>" data-color="<?php echo $theme['color_key']; ?>" data-pattern="<?php echo $theme['pattern']; ?>"><i class="fa-solid fa-palette"></i> Customize Cover</button></li>
                                     <li><hr class="dropdown-divider"></li>
                                     <li><button class="dropdown-item btn-add-makeup" type="button" data-data='<?php echo json_encode($group); ?>'><i class="fa-solid fa-calendar-plus"></i> Add Makeup Class</button></li>
                                 </ul>
@@ -589,39 +632,98 @@ require_once __DIR__ . '/../includes/teacher_header.php';
 
 <div class="modal fade" id="scheduleModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content rounded-4">
-            <div class="modal-header">
-                <h5 class="modal-title" id="scheduleModalTitle">Edit Schedule</h5>
+        <div class="modal-content sp-policy-modal">
+            <div class="sp-policy-head">
+                <span class="sp-policy-head__icon"><i class="fa-solid fa-calendar-days"></i></span>
+                <div class="flex-grow-1" style="min-width:0;">
+                    <h5 class="sp-policy-head__title" id="scheduleModalTitle">Edit Schedule</h5>
+                    <div class="sp-policy-head__sub" id="scheduleModalSubject"></div>
+                </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <form method="post">
                 <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
                 <input type="hidden" name="action" value="save_schedule">
                 <input type="hidden" name="id" id="scheduleIdField">
-                <div class="modal-body row g-3">
-                    <div class="col-12">
-                        <label class="form-label">Days of Week</label>
-                        <div class="d-flex flex-wrap gap-3" id="scheduleDayField">
-                            <?php foreach (['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] as $day): ?>
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" name="day_of_week[]" value="<?php echo $day; ?>" id="scheduleDay<?php echo $day; ?>">
-                                    <label class="form-check-label" for="scheduleDay<?php echo $day; ?>"><?php echo $day; ?></label>
-                                </div>
-                            <?php endforeach; ?>
+                <div class="modal-body sp-policy-body">
+                    <div class="sp-sched-label"><i class="fa-solid fa-calendar-week"></i> Days of Week</div>
+                    <div class="sp-day-picker" id="scheduleDayField">
+                        <?php foreach (['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] as $day): ?>
+                            <input class="sp-day-picker__input" type="checkbox" name="day_of_week[]" value="<?php echo $day; ?>" id="scheduleDay<?php echo $day; ?>">
+                            <label class="sp-day-picker__chip" for="scheduleDay<?php echo $day; ?>"><?php echo $day; ?></label>
+                        <?php endforeach; ?>
+                    </div>
+
+                    <div class="row g-3 mt-1">
+                        <div class="col-6">
+                            <label class="sp-policy-field sp-policy-field--start" for="scheduleStartTimeField">
+                                <span class="sp-policy-field__label"><i class="fa-solid fa-play"></i> Start Time</span>
+                                <input type="time" class="form-control" name="start_time" id="scheduleStartTimeField" required>
+                            </label>
+                        </div>
+                        <div class="col-6">
+                            <label class="sp-policy-field sp-policy-field--end" for="scheduleEndTimeField">
+                                <span class="sp-policy-field__label"><i class="fa-solid fa-flag-checkered"></i> End Time</span>
+                                <input type="time" class="form-control" name="end_time" id="scheduleEndTimeField" required>
+                            </label>
                         </div>
                     </div>
-                    <div class="col-md-6">
-                        <label class="form-label">Start Time</label>
-                        <input type="time" class="form-control" name="start_time" id="scheduleStartTimeField" required>
+
+                    <div class="sp-sched-summary" id="scheduleSummary"></div>
+                </div>
+                <div class="sp-policy-foot">
+                    <button type="button" class="btn sp-policy-btn sp-policy-btn--ghost" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn sp-policy-btn sp-policy-btn--primary"><i class="fa-solid fa-floppy-disk"></i> Save Schedule</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="coverModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content sp-policy-modal">
+            <div class="sp-policy-head">
+                <span class="sp-policy-head__icon"><i class="fa-solid fa-palette"></i></span>
+                <div class="flex-grow-1" style="min-width:0;">
+                    <h5 class="sp-policy-head__title">Customize Cover</h5>
+                    <div class="sp-policy-head__sub" id="coverModalSubject"></div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="post">
+                <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
+                <input type="hidden" name="action" value="save_cover">
+                <input type="hidden" name="id" id="coverIdField">
+                <div class="modal-body sp-policy-body">
+                    <div class="sp-cover-preview sp-subject-band sp-cover" id="coverPreview">
+                        <i class="fa-solid sp-subject-icon" id="coverPreviewIcon"></i>
+                        <span class="sp-subject-code" id="coverPreviewCode"></span>
+                        <span class="sp-subject-name" id="coverPreviewName"></span>
                     </div>
-                    <div class="col-md-6">
-                        <label class="form-label">End Time</label>
-                        <input type="time" class="form-control" name="end_time" id="scheduleEndTimeField" required>
+
+                    <div class="sp-sched-label mt-3"><i class="fa-solid fa-droplet"></i> Color</div>
+                    <div class="sp-cover-swatches">
+                        <?php foreach (subjectCoverColors() as $key => [$label, $color, $colorEnd]): ?>
+                            <input class="sp-day-picker__input" type="radio" name="cover_color" value="<?php echo $key; ?>" id="coverColor_<?php echo $key; ?>" data-gradient="linear-gradient(135deg, <?php echo $color; ?> 0%, <?php echo $colorEnd; ?> 100%)">
+                            <label class="sp-cover-swatch" for="coverColor_<?php echo $key; ?>" title="<?php echo $label; ?>" style="background: linear-gradient(135deg, <?php echo $color; ?> 0%, <?php echo $colorEnd; ?> 100%);"><i class="fa-solid fa-check"></i></label>
+                        <?php endforeach; ?>
+                    </div>
+
+                    <div class="sp-sched-label mt-3"><i class="fa-solid fa-shapes"></i> Design</div>
+                    <div class="sp-cover-patterns">
+                        <?php foreach (subjectCoverPatterns() as $key => $label): ?>
+                            <input class="sp-day-picker__input" type="radio" name="cover_pattern" value="<?php echo $key; ?>" id="coverPattern_<?php echo $key; ?>">
+                            <label class="sp-cover-pattern" for="coverPattern_<?php echo $key; ?>">
+                                <span class="sp-cover-pattern__thumb sp-cover sp-cover--<?php echo $key; ?>"></span>
+                                <span class="sp-cover-pattern__name"><?php echo $label; ?></span>
+                            </label>
+                        <?php endforeach; ?>
                     </div>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Save Schedule</button>
+                <div class="sp-policy-foot">
+                    <button type="button" class="btn sp-policy-btn sp-policy-btn--ghost" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn sp-policy-btn sp-policy-btn--primary"><i class="fa-solid fa-floppy-disk"></i> Save Cover</button>
                 </div>
             </form>
         </div>
@@ -630,27 +732,59 @@ require_once __DIR__ . '/../includes/teacher_header.php';
 
 <div class="modal fade" id="policyModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content rounded-4">
-            <div class="modal-header">
-                <h5 class="modal-title" id="policyModalTitle">Edit Attendance Policy</h5>
+        <div class="modal-content sp-policy-modal">
+            <div class="sp-policy-head">
+                <span class="sp-policy-head__icon"><i class="fa-solid fa-shield-halved"></i></span>
+                <div class="flex-grow-1" style="min-width:0;">
+                    <h5 class="sp-policy-head__title" id="policyModalTitle">Attendance Policy</h5>
+                    <div class="sp-policy-head__sub" id="policyModalSubject"></div>
+                </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <form method="post">
                 <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
                 <input type="hidden" name="action" value="save_policy">
                 <input type="hidden" name="id" id="policyIdField">
-                <div class="modal-body">
-                    <p class="text-muted small">A student is marked <strong>Late</strong> if they scan after the start time but within this many minutes, and <strong>Absent</strong> if they scan later than that (or never scan).</p>
-                    <div class="form-check mb-3">
-                        <input class="form-check-input" type="checkbox" name="use_default" id="policyUseDefaultField">
-                        <label class="form-check-label" for="policyUseDefaultField">Use school default (<?php echo intval(getSetting('absent_cutoff_minutes', 20)); ?> minutes)</label>
+                <div class="modal-body sp-policy-body">
+                    <div class="sp-policy-start">
+                        <i class="fa-regular fa-clock"></i>
+                        <span>Class starts at <strong id="policyStartLabel"></strong></span>
                     </div>
-                    <label class="form-label">Absent after (minutes late)</label>
-                    <input type="number" class="form-control" name="absent_cutoff_minutes" id="policyCutoffField" min="1" max="180" required>
+
+                    <div class="row g-3">
+                        <div class="col-6">
+                            <label class="sp-policy-field sp-policy-field--late" for="policyLateField">
+                                <span class="sp-policy-field__label"><i class="fa-solid fa-hourglass-half"></i> Late starts at</span>
+                                <input type="time" class="form-control" name="late_time" id="policyLateField" required>
+                            </label>
+                        </div>
+                        <div class="col-6">
+                            <label class="sp-policy-field sp-policy-field--absent" for="policyAbsentField">
+                                <span class="sp-policy-field__label"><i class="fa-solid fa-user-xmark"></i> Absent starts at</span>
+                                <input type="time" class="form-control" name="absent_time" id="policyAbsentField" required>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="sp-policy-timeline">
+                        <div class="sp-policy-seg sp-policy-seg--present">
+                            <span class="sp-policy-seg__name"><i class="fa-solid fa-circle-check"></i> Present</span>
+                            <span class="sp-policy-seg__time" id="policyTlPresent">&mdash;</span>
+                        </div>
+                        <div class="sp-policy-seg sp-policy-seg--late">
+                            <span class="sp-policy-seg__name"><i class="fa-solid fa-clock"></i> Late</span>
+                            <span class="sp-policy-seg__time" id="policyTlLate">&mdash;</span>
+                        </div>
+                        <div class="sp-policy-seg sp-policy-seg--absent">
+                            <span class="sp-policy-seg__name"><i class="fa-solid fa-circle-xmark"></i> Absent</span>
+                            <span class="sp-policy-seg__time" id="policyTlAbsent">&mdash;</span>
+                        </div>
+                    </div>
+                    <p class="sp-policy-note mb-0"><i class="fa-solid fa-circle-info"></i> Students with no scan at all are marked <strong>Absent</strong>.</p>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Save Policy</button>
+                <div class="sp-policy-foot">
+                    <button type="button" class="btn sp-policy-btn sp-policy-btn--ghost" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn sp-policy-btn sp-policy-btn--primary"><i class="fa-solid fa-floppy-disk"></i> Save Policy</button>
                 </div>
             </form>
         </div>
@@ -802,7 +936,7 @@ document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('.btn-edit-schedule').forEach(btn => {
         btn.addEventListener('click', () => {
             const data = JSON.parse(btn.getAttribute('data-data'));
-            document.getElementById('scheduleModalTitle').textContent = 'Edit Schedule — ' + data.name;
+            document.getElementById('scheduleModalSubject').textContent = data.name;
             document.getElementById('scheduleIdField').value = data.id;
             const selectedDays = data.group_days || [data.day_of_week];
             document.querySelectorAll('#scheduleDayField input[type="checkbox"]').forEach(cb => {
@@ -810,26 +944,99 @@ document.addEventListener('DOMContentLoaded', function () {
             });
             document.getElementById('scheduleStartTimeField').value = data.start_time;
             document.getElementById('scheduleEndTimeField').value = data.end_time || '';
+            updateScheduleSummary();
             scheduleModal.show();
         });
     });
 
-    const policyModal = new bootstrap.Modal(document.getElementById('policyModal'));
-    const policyUseDefaultField = document.getElementById('policyUseDefaultField');
-    const policyCutoffField = document.getElementById('policyCutoffField');
-    policyUseDefaultField.addEventListener('change', function () {
-        policyCutoffField.disabled = this.checked;
+    // Live summary under the schedule fields, e.g. "Mon, Wed · 7:00 AM – 8:30 AM (1 hr 30 min)"
+    function updateScheduleSummary() {
+        const days = Array.from(document.querySelectorAll('#scheduleDayField input:checked')).map(cb => cb.value);
+        const start = document.getElementById('scheduleStartTimeField').value;
+        const end = document.getElementById('scheduleEndTimeField').value;
+        const mins = t => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+        const fmt = t => { const [h, m] = t.split(':').map(Number); return ((h % 12) || 12) + ':' + String(m).padStart(2, '0') + (h < 12 ? ' AM' : ' PM'); };
+        let text = days.length ? days.join(', ') : 'No days selected';
+        if (start && end) {
+            text += ' · ' + fmt(start) + ' – ' + fmt(end);
+            const diff = mins(end) - mins(start);
+            if (diff > 0) {
+                const h = Math.floor(diff / 60), m = diff % 60;
+                text += ' (' + [h ? h + ' hr' + (h > 1 ? 's' : '') : '', m ? m + ' min' : ''].filter(Boolean).join(' ') + ')';
+            }
+        }
+        document.getElementById('scheduleSummary').innerHTML = '<i class="fa-regular fa-clock"></i> ' + escapeHtml(text);
+    }
+    document.querySelectorAll('#scheduleDayField input, #scheduleStartTimeField, #scheduleEndTimeField').forEach(el => {
+        el.addEventListener('change', updateScheduleSummary);
+        el.addEventListener('input', updateScheduleSummary);
     });
+
+    const policyModal = new bootstrap.Modal(document.getElementById('policyModal'));
+    const policyLateField = document.getElementById('policyLateField');
+    const policyAbsentField = document.getElementById('policyAbsentField');
+    let policyStart = '00:00';
+
+    // 'HH:MM' <-> minutes since midnight, for the start-relative offsets.
+    const toMinutes = t => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+    const fromMinutes = m => { m = ((m % 1440) + 1440) % 1440; return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); };
+    const to12h = t => { const [h, m] = t.split(':').map(Number); return ((h % 12) || 12) + ':' + String(m).padStart(2, '0') + (h < 12 ? ' AM' : ' PM'); };
+
+    function updatePolicyHint() {
+        const late = policyLateField.value, absent = policyAbsentField.value;
+        policyLateField.setCustomValidity(late && toMinutes(late) <= toMinutes(policyStart) ? 'Late time must be after the class start.' : '');
+        policyAbsentField.setCustomValidity(late && absent && toMinutes(absent) <= toMinutes(late) ? 'Absent time must be after the Late time.' : '');
+        document.getElementById('policyTlPresent').textContent = late ? to12h(policyStart) + ' – ' + to12h(late) : '—';
+        document.getElementById('policyTlLate').textContent = (late && absent) ? to12h(late) + ' – ' + to12h(absent) : '—';
+        document.getElementById('policyTlAbsent').textContent = absent ? 'from ' + to12h(absent) : '—';
+    }
+    [policyLateField, policyAbsentField].forEach(field => {
+        field.addEventListener('input', updatePolicyHint);
+    });
+
     document.querySelectorAll('.btn-edit-policy').forEach(btn => {
         btn.addEventListener('click', () => {
             const data = JSON.parse(btn.getAttribute('data-data'));
-            document.getElementById('policyModalTitle').textContent = 'Edit Attendance Policy — ' + data.name;
+            document.getElementById('policyModalSubject').textContent = data.name;
             document.getElementById('policyIdField').value = data.id;
-            const hasCustom = data.absent_cutoff_minutes !== null && data.absent_cutoff_minutes !== undefined;
-            policyUseDefaultField.checked = !hasCustom;
-            policyCutoffField.value = hasCustom ? data.absent_cutoff_minutes : 20;
-            policyCutoffField.disabled = !hasCustom;
+            policyStart = (data.start_time || '00:00').slice(0, 5);
+            document.getElementById('policyStartLabel').textContent = to12h(policyStart);
+            const hasCustom = data.late_after_minutes !== null && data.late_after_minutes !== undefined
+                && data.absent_after_minutes !== null && data.absent_after_minutes !== undefined;
+            // Unset classes get a sensible starting suggestion: late +5 min, absent +60 min.
+            policyLateField.value = fromMinutes(toMinutes(policyStart) + (hasCustom ? Number(data.late_after_minutes) : 5));
+            policyAbsentField.value = fromMinutes(toMinutes(policyStart) + (hasCustom ? Number(data.absent_after_minutes) : 60));
+            updatePolicyHint();
             policyModal.show();
+        });
+    });
+
+    // Cover picker: live preview of the chosen color + design
+    const coverModal = new bootstrap.Modal(document.getElementById('coverModal'));
+    const coverPreview = document.getElementById('coverPreview');
+    function updateCoverPreview() {
+        const color = document.querySelector('#coverModal input[name="cover_color"]:checked');
+        const pattern = document.querySelector('#coverModal input[name="cover_pattern"]:checked');
+        if (color) {
+            coverPreview.style.background = color.dataset.gradient;
+            document.querySelectorAll('#coverModal .sp-cover-pattern__thumb').forEach(t => { t.style.background = color.dataset.gradient; });
+        }
+        coverPreview.className = 'sp-cover-preview sp-subject-band sp-cover sp-cover--' + (pattern ? pattern.value : 'plain');
+    }
+    document.querySelectorAll('#coverModal input[type="radio"]').forEach(r => r.addEventListener('change', updateCoverPreview));
+    document.querySelectorAll('.btn-edit-cover').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.getElementById('coverIdField').value = btn.dataset.id;
+            document.getElementById('coverModalSubject').textContent = btn.dataset.name;
+            document.getElementById('coverPreviewCode').textContent = btn.dataset.code;
+            document.getElementById('coverPreviewName').textContent = btn.dataset.name;
+            document.getElementById('coverPreviewIcon').className = 'fa-solid sp-subject-icon ' + btn.dataset.icon;
+            const colorInput = document.getElementById('coverColor_' + btn.dataset.color);
+            const patternInput = document.getElementById('coverPattern_' + btn.dataset.pattern);
+            if (colorInput) colorInput.checked = true;
+            if (patternInput) patternInput.checked = true;
+            updateCoverPreview();
+            coverModal.show();
         });
     });
 

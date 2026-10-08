@@ -10,7 +10,9 @@ if ($teacherId === false) {
     redirect('../dashboard.php');
 }
 
-$date = sanitize($_GET['date'] ?? date('Y-m-d'));
+$studentFilterId = intval($_GET['student'] ?? 0);
+// When viewing one student's records, show every date unless a date is picked
+$date = sanitize($_GET['date'] ?? ($studentFilterId ? '' : date('Y-m-d')));
 $subjectId = intval($_GET['subject_id'] ?? 0);
 
 $subjectsStmt = $mysqli->prepare('SELECT id, code, name FROM subjects WHERE teacher_id = ? ORDER BY name');
@@ -32,15 +34,34 @@ if ($subjectId) {
     $scopedStmt->close();
 }
 
-$query = 'SELECT a.*, s.student_id, CONCAT(s.first_name, " ", s.last_name) AS student_name, c.code AS course_code, sec.room_name, sub.name AS subject_name FROM attendance a LEFT JOIN students s ON a.student_id = s.id LEFT JOIN courses c ON a.course_id = c.id LEFT JOIN rooms sec ON a.room_id = sec.id JOIN subjects sub ON a.subject_id = sub.id WHERE a.date = ? AND sub.teacher_id = ?';
-$types = 'si';
-$params = [$date, $teacherId];
+$filterStudent = null;
+if ($studentFilterId) {
+    $fsStmt = $mysqli->prepare('SELECT id, student_id, first_name, last_name FROM students WHERE id = ? LIMIT 1');
+    $fsStmt->bind_param('i', $studentFilterId);
+    $fsStmt->execute();
+    $filterStudent = $fsStmt->get_result()->fetch_assoc();
+    $fsStmt->close();
+}
+
+$query = 'SELECT a.*, s.student_id, CONCAT(s.first_name, " ", s.last_name) AS student_name, c.code AS course_code, sec.room_name, sub.name AS subject_name FROM attendance a LEFT JOIN students s ON a.student_id = s.id LEFT JOIN courses c ON a.course_id = c.id LEFT JOIN rooms sec ON a.room_id = sec.id JOIN subjects sub ON a.subject_id = sub.id WHERE sub.teacher_id = ?';
+$types = 'i';
+$params = [$teacherId];
+if ($date !== '') {
+    $query .= ' AND a.date = ?';
+    $types .= 's';
+    $params[] = $date;
+}
+if ($studentFilterId) {
+    $query .= ' AND a.student_id = ?';
+    $types .= 'i';
+    $params[] = $studentFilterId;
+}
 if ($subjectId) {
     $query .= ' AND sub.id = ?';
     $types .= 'i';
     $params[] = $subjectId;
 }
-$query .= ' ORDER BY a.created_at DESC';
+$query .= ' ORDER BY a.date DESC, a.time DESC';
 $records = $mysqli->prepare($query);
 $records->bind_param($types, ...$params);
 $records->execute();
@@ -54,18 +75,27 @@ require_once __DIR__ . '/../includes/teacher_header.php';
 <?php endif; ?>
 
 <div class="card p-4">
+    <?php if ($filterStudent): ?>
+        <div class="alert alert-light border d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+            <span><i class="fa-solid fa-user me-1"></i> Showing records for <strong><?php echo htmlspecialchars(trim($filterStudent['first_name'] . ' ' . $filterStudent['last_name'])); ?></strong> (<?php echo htmlspecialchars($filterStudent['student_id']); ?>)<?php echo $date === '' ? ' &mdash; all dates' : ''; ?></span>
+            <a href="attendance.php<?php echo $subjectId ? '?subject_id=' . $subjectId : ''; ?>" class="btn btn-sm btn-outline-secondary"><i class="fa-solid fa-xmark"></i> Clear student filter</a>
+        </div>
+    <?php endif; ?>
     <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
         <?php if ($scopedSubject): ?>
             <a href="class-details.php?id=<?php echo $scopedSubject['id']; ?>" class="btn btn-outline-secondary btn-sm"><i class="fa-solid fa-arrow-left"></i> Back to Details</a>
         <?php endif; ?>
         <form method="get" class="d-flex gap-2">
+            <?php if ($studentFilterId): ?>
+                <input type="hidden" name="student" value="<?php echo $studentFilterId; ?>">
+            <?php endif; ?>
             <?php if ($subjectId): ?>
                 <input type="hidden" name="subject_id" value="<?php echo $subjectId; ?>">
             <?php else: ?>
                 <select class="form-select" name="subject_id">
                     <option value="0">All Classes</option>
                     <?php foreach ($mySubjects as $subj): ?>
-                        <option value="<?php echo $subj['id']; ?>"><?php echo htmlspecialchars($subj['code']); ?></option>
+                        <option value="<?php echo $subj['id']; ?>" <?php echo $subjectId === (int) $subj['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($subj['code']); ?></option>
                     <?php endforeach; ?>
                 </select>
             <?php endif; ?>
@@ -96,7 +126,7 @@ require_once __DIR__ . '/../includes/teacher_header.php';
 </div>
 <script>
 $(document).ready(function () {
-    $('#teacherAttendanceTable').DataTable({ responsive: true });
+    $('#teacherAttendanceTable').DataTable({ responsive: true, order: [] });
 });
 </script>
 <?php require_once __DIR__ . '/../includes/teacher_footer.php'; ?>

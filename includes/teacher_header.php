@@ -34,9 +34,10 @@ $navItems = [
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/datatables.net-bs5/2.3.8/dataTables.bootstrap5.min.css" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&display=swap">
     <link rel="stylesheet" href="../assets/css/theme-tokens.css">
     <link rel="stylesheet" href="../assets/css/dashboard-theme.css">
-    <link rel="stylesheet" href="../assets/css/student-portal.css">
+    <link rel="stylesheet" href="../assets/css/student-portal.css?v=<?php echo filemtime(__DIR__ . '/../assets/css/student-portal.css'); ?>">
 </head>
 <body class="student-body">
 <div class="sp-shell" id="spShell">
@@ -62,14 +63,26 @@ $navItems = [
                 </a>
             <?php endforeach; ?>
         </nav>
-        <div class="sp-sidebar-illustration">
-            <img src="../assets/images/sidebar.png" alt="">
-        </div>
+        <div class="sp-brand-divider sp-footer-divider"></div>
         <div class="sp-nav-footer">
+            <a href="<?php echo $teacherBase; ?>profile.php" class="sp-sidebar-user" title="My Profile">
+                <?php if ($sidebarTeacher && $sidebarTeacher['photo']): ?>
+                    <img src="../<?php echo htmlspecialchars($sidebarTeacher['photo']); ?>" alt="" class="sp-sidebar-user__avatar">
+                <?php else: ?>
+                    <span class="sp-sidebar-user__avatar sp-sidebar-user__initials"><?php echo htmlspecialchars($sidebarTeacher ? nameInitials($sidebarTeacher['first_name'], $sidebarTeacher['last_name']) : 'T'); ?></span>
+                <?php endif; ?>
+                <span class="sp-sidebar-user__text">
+                    <span class="sp-sidebar-user__name"><?php echo htmlspecialchars($sidebarTeacher ? $sidebarTeacher['first_name'] . ' ' . $sidebarTeacher['last_name'] : 'Teacher'); ?></span>
+                    <span class="sp-sidebar-user__role">Teacher Portal</span>
+                </span>
+            </a>
             <a href="#" class="sp-nav-link" data-bs-toggle="modal" data-bs-target="#logoutConfirmModal">
                 <span class="sp-nav-icon"><i class="fa-solid fa-right-from-bracket"></i></span>
                 <span class="sp-nav-label">Logout</span>
             </a>
+        </div>
+        <div class="sp-sidebar-illustration">
+            <img src="../assets/images/sidebar.png" alt="">
         </div>
     </aside>
     <div class="sp-main">
@@ -83,19 +96,6 @@ $navItems = [
                     <?php if (!empty($pageSubtitle)): ?>
                         <p class="sp-topbar-subtitle"><?php echo htmlspecialchars($pageSubtitle); ?></p>
                     <?php endif; ?>
-                </div>
-            </div>
-            <div class="sp-topbar-right">
-                <div class="sp-user">
-                    <?php if ($sidebarTeacher && $sidebarTeacher['photo']): ?>
-                        <img src="../<?php echo htmlspecialchars($sidebarTeacher['photo']); ?>" alt="">
-                    <?php else: ?>
-                        <i class="fa-solid fa-circle-user fa-2x text-secondary"></i>
-                    <?php endif; ?>
-                    <div>
-                        <div class="sp-user-name"><?php echo htmlspecialchars($sidebarTeacher ? $sidebarTeacher['first_name'] . ' ' . $sidebarTeacher['last_name'] : 'Teacher'); ?></div>
-                        <div class="sp-user-role">Teacher</div>
-                    </div>
                 </div>
             </div>
         </header>

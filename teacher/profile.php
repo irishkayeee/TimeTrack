@@ -118,7 +118,7 @@ require_once __DIR__ . '/../includes/teacher_header.php';
                 <?php if ($teacher['photo']): ?>
                     <img src="../<?php echo htmlspecialchars($teacher['photo']); ?>" class="sp-profile-photo" alt="">
                 <?php else: ?>
-                    <div class="sp-profile-photo sp-profile-photo-fallback"><i class="fa-solid fa-user"></i></div>
+                    <div class="sp-profile-photo sp-profile-photo-fallback sp-profile-initials"><?php echo htmlspecialchars(nameInitials($teacher['first_name'], $teacher['last_name'])); ?></div>
                 <?php endif; ?>
                 <button type="button" class="sp-profile-photo-btn" onclick="document.getElementById('photoUploadInput').click();"><i class="fa-solid fa-camera"></i></button>
             </div>

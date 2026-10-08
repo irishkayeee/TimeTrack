@@ -182,7 +182,7 @@ require_once __DIR__ . '/../includes/admin_header.php';
 <div class="card p-4 mb-3 sp-greeting-card">
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
         <div>
-            <h4 class="mb-1"><span id="spGreetingWord"><?php echo htmlspecialchars($greeting); ?></span>, <?php echo htmlspecialchars($adminUser['role'] ?? 'admin'); ?>! 👋</h4>
+            <h4 class="mb-1"><span id="spGreetingWord"><?php echo htmlspecialchars($greeting); ?></span>, <?php echo htmlspecialchars($adminUser['role'] ?? 'admin'); ?>! <span class="sp-greeting-wave">👋</span></h4>
             <p class="text-muted mb-2">Here's what's happening across the school today.</p>
             <span class="sp-shd-pill"><i class="fa-solid fa-calendar"></i> <?php echo htmlspecialchars($semester . ', AY ' . $schoolYear); ?></span>
         </div>
@@ -212,63 +212,76 @@ require_once __DIR__ . '/../includes/admin_header.php';
     spUpdateClock();
     setInterval(spUpdateClock, 1000);
 </script>
+<?php $attendanceTodayPct = $studentsCount ? min(100, round($attendanceToday / $studentsCount * 100)) : 0; ?>
 <div class="row g-3">
     <div class="col-6 col-lg">
-        <div class="card p-3 text-center stat-card-clickable" data-bs-toggle="modal" data-bs-target="#studentsListModal">
-            <div class="d-flex align-items-center justify-content-center gap-2 mb-2">
-                <span class="stat-icon"><i class="fa-solid fa-user-graduate"></i></span>
-                <h6 class="text-muted small text-uppercase mb-0">Students</h6>
+        <div class="stat-card-v2 stat-card-v2--green" data-bs-toggle="modal" data-bs-target="#studentsListModal">
+            <div class="stat-card-v2__top">
+                <span class="stat-card-v2__icon"><i class="fa-solid fa-user-graduate"></i></span>
+                <span class="stat-card-v2__label">Students</span>
+                <i class="fa-solid fa-chevron-right stat-card-v2__chevron"></i>
             </div>
-            <h2 class="mb-0"><?php echo $studentsCount; ?></h2>
+            <div class="stat-card-v2__value"><?php echo $studentsCount; ?></div>
+            <div class="stat-card-v2__sublabel">Total enrolled</div>
         </div>
     </div>
     <div class="col-6 col-lg">
-        <div class="card p-3 text-center stat-card-clickable" data-bs-toggle="modal" data-bs-target="#teachersListModal">
-            <div class="d-flex align-items-center justify-content-center gap-2 mb-2">
-                <span class="stat-icon"><i class="fa-solid fa-chalkboard-user"></i></span>
-                <h6 class="text-muted small text-uppercase mb-0">Teachers</h6>
+        <div class="stat-card-v2 stat-card-v2--blue" data-bs-toggle="modal" data-bs-target="#teachersListModal">
+            <div class="stat-card-v2__top">
+                <span class="stat-card-v2__icon"><i class="fa-solid fa-chalkboard-user"></i></span>
+                <span class="stat-card-v2__label">Teachers</span>
+                <i class="fa-solid fa-chevron-right stat-card-v2__chevron"></i>
             </div>
-            <h2 class="mb-0"><?php echo $teachersCount; ?></h2>
+            <div class="stat-card-v2__value"><?php echo $teachersCount; ?></div>
+            <div class="stat-card-v2__sublabel">Total active</div>
         </div>
     </div>
     <div class="col-6 col-lg">
-        <div class="card p-3 text-center stat-card-clickable" data-bs-toggle="modal" data-bs-target="#coursesListModal">
-            <div class="d-flex align-items-center justify-content-center gap-2 mb-2">
-                <span class="stat-icon"><i class="fa-solid fa-graduation-cap"></i></span>
-                <h6 class="text-muted small text-uppercase mb-0">Courses</h6>
+        <div class="stat-card-v2 stat-card-v2--purple" data-bs-toggle="modal" data-bs-target="#coursesListModal">
+            <div class="stat-card-v2__top">
+                <span class="stat-card-v2__icon"><i class="fa-solid fa-graduation-cap"></i></span>
+                <span class="stat-card-v2__label">Courses</span>
+                <i class="fa-solid fa-chevron-right stat-card-v2__chevron"></i>
             </div>
-            <h2 class="mb-0"><?php echo $coursesCount; ?></h2>
+            <div class="stat-card-v2__value"><?php echo $coursesCount; ?></div>
+            <div class="stat-card-v2__sublabel">Offered this term</div>
         </div>
     </div>
     <div class="col-6 col-lg">
-        <div class="card p-3 text-center stat-card-clickable" data-bs-toggle="modal" data-bs-target="#roomsListModal">
-            <div class="d-flex align-items-center justify-content-center gap-2 mb-2">
-                <span class="stat-icon"><i class="fa-solid fa-people-group"></i></span>
-                <h6 class="text-muted small text-uppercase mb-0">Rooms</h6>
+        <div class="stat-card-v2 stat-card-v2--orange" data-bs-toggle="modal" data-bs-target="#roomsListModal">
+            <div class="stat-card-v2__top">
+                <span class="stat-card-v2__icon"><i class="fa-solid fa-people-group"></i></span>
+                <span class="stat-card-v2__label">Rooms</span>
+                <i class="fa-solid fa-chevron-right stat-card-v2__chevron"></i>
             </div>
-            <h2 class="mb-0"><?php echo $roomsCount; ?></h2>
+            <div class="stat-card-v2__value"><?php echo $roomsCount; ?></div>
+            <div class="stat-card-v2__sublabel">Available</div>
         </div>
     </div>
     <div class="col-6 col-lg">
-        <div class="card p-3 text-center stat-card-clickable" data-bs-toggle="modal" data-bs-target="#attendanceTodayListModal">
-            <div class="d-flex align-items-center justify-content-center gap-2 mb-2">
-                <span class="stat-icon"><i class="fa-solid fa-clipboard-check"></i></span>
-                <h6 class="text-muted small text-uppercase mb-0">Attendance Today</h6>
+        <div class="stat-card-v2 stat-card-v2--teal" data-bs-toggle="modal" data-bs-target="#attendanceTodayListModal">
+            <div class="stat-card-v2__top">
+                <span class="stat-card-v2__icon"><i class="fa-solid fa-clipboard-check"></i></span>
+                <span class="stat-card-v2__label">Attendance Today</span>
+                <i class="fa-solid fa-chevron-right stat-card-v2__chevron"></i>
             </div>
-            <h2 class="mb-0"><?php echo $attendanceToday; ?></h2>
+            <div class="stat-card-v2__value"><?php echo $attendanceToday; ?></div>
+            <div class="stat-card-v2__progress"><div class="stat-card-v2__progress-bar" style="width: <?php echo $attendanceTodayPct; ?>%"></div></div>
+            <div class="stat-card-v2__sublabel"><?php echo $attendanceTodayPct; ?>% of students</div>
         </div>
     </div>
 </div>
 
 <div class="row g-3 mt-1">
     <div class="col-6 col-lg-4">
-        <div class="card p-3 text-center">
-            <div class="d-flex align-items-center justify-content-center gap-2 mb-2">
-                <span class="stat-icon"><i class="fa-solid fa-envelope-circle-check"></i></span>
-                <h6 class="text-muted small text-uppercase mb-0">Guardian Email Coverage</h6>
+        <div class="stat-card-v2 stat-card-v2--rose">
+            <div class="stat-card-v2__top">
+                <span class="stat-card-v2__icon"><i class="fa-solid fa-envelope-circle-check"></i></span>
+                <span class="stat-card-v2__label">Guardian Email Coverage</span>
             </div>
-            <h2 class="mb-0"><?php echo $guardianCoveragePct; ?>%</h2>
-            <p class="text-muted small mb-0"><?php echo (int) $guardianCoverage['with_email']; ?> of <?php echo (int) $guardianCoverage['total']; ?> students</p>
+            <div class="stat-card-v2__value"><?php echo $guardianCoveragePct; ?>%</div>
+            <div class="stat-card-v2__progress"><div class="stat-card-v2__progress-bar" style="width: <?php echo $guardianCoveragePct; ?>%"></div></div>
+            <div class="stat-card-v2__sublabel"><?php echo (int) $guardianCoverage['with_email']; ?> of <?php echo (int) $guardianCoverage['total']; ?> students</div>
         </div>
     </div>
 </div>
@@ -302,7 +315,7 @@ require_once __DIR__ . '/../includes/admin_header.php';
     </form>
 </div>
 <div class="row g-3">
-    <div class="col-lg-8">
+    <div class="col-lg-6">
         <div class="card p-3 h-100">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h6 class="mb-0">Attendance Rate Trend <span class="text-muted small fw-normal">(last 8 weeks)</span></h6>
@@ -311,13 +324,14 @@ require_once __DIR__ . '/../includes/admin_header.php';
                 <?php endif; ?>
             </div>
             <?php if ($trendData): ?>
-                <div style="height:260px;"><canvas id="trendChart"></canvas></div>
+                <div class="sp-chart-box" style="height:280px;"><canvas id="trendChart"></canvas></div>
+                <?php echo renderChartInsights(insightsForTrend($trendLabels, $trendData)); ?>
             <?php else: ?>
                 <p class="text-muted small mb-0">Not enough data yet.</p>
             <?php endif; ?>
         </div>
     </div>
-    <div class="col-lg-4">
+    <div class="col-lg-6">
         <div class="card p-3 h-100">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h6 class="mb-0">Peak Absence Days</h6>
@@ -326,7 +340,8 @@ require_once __DIR__ . '/../includes/admin_header.php';
                 <?php endif; ?>
             </div>
             <?php if ($dowData): ?>
-                <div style="height:260px;"><canvas id="dowChart"></canvas></div>
+                <div class="sp-chart-box" style="height:280px;"><canvas id="dowChart"></canvas></div>
+                <?php echo renderChartInsights(insightsForPeak($dowLabels, $dowData, 'peak absence day', 'absences')); ?>
             <?php else: ?>
                 <p class="text-muted small mb-0">Not enough data yet.</p>
             <?php endif; ?>
@@ -341,7 +356,8 @@ require_once __DIR__ . '/../includes/admin_header.php';
                 <?php endif; ?>
             </div>
             <?php if ($roomData): ?>
-                <div style="height:240px;"><canvas id="roomChart"></canvas></div>
+                <div class="sp-chart-box" style="height:280px;"><canvas id="roomChart"></canvas></div>
+                <?php echo renderChartInsights(insightsForRateRanking($roomLabels, $roomData, 'room')); ?>
             <?php else: ?>
                 <p class="text-muted small mb-0">Not enough data yet.</p>
             <?php endif; ?>
@@ -356,7 +372,8 @@ require_once __DIR__ . '/../includes/admin_header.php';
                 <?php endif; ?>
             </div>
             <?php if ($courseData): ?>
-                <div style="height:240px;"><canvas id="courseChart"></canvas></div>
+                <div class="sp-chart-box" style="height:280px;"><canvas id="courseChart"></canvas></div>
+                <?php echo renderChartInsights(insightsForRateRanking($courseLabels, $courseData, 'course')); ?>
             <?php else: ?>
                 <p class="text-muted small mb-0">Not enough data yet.</p>
             <?php endif; ?>
@@ -371,7 +388,8 @@ require_once __DIR__ . '/../includes/admin_header.php';
                 <?php endif; ?>
             </div>
             <?php if ($teacherData): ?>
-                <div style="height:240px;"><canvas id="teacherChart"></canvas></div>
+                <div class="sp-chart-box" style="height:280px;"><canvas id="teacherChart"></canvas></div>
+                <?php echo renderChartInsights(insightsForRateRanking($teacherLabels, $teacherData, 'teacher')); ?>
             <?php else: ?>
                 <p class="text-muted small mb-0">Not enough data yet.</p>
             <?php endif; ?>
@@ -386,7 +404,8 @@ require_once __DIR__ . '/../includes/admin_header.php';
                 <?php endif; ?>
             </div>
             <?php if ($hourData): ?>
-                <div style="height:240px;"><canvas id="hourChart"></canvas></div>
+                <div class="sp-chart-box" style="height:280px;"><canvas id="hourChart"></canvas></div>
+                <?php echo renderChartInsights(insightsForPeak($hourLabels, $hourData, 'busiest scan hour', 'scans')); ?>
             <?php else: ?>
                 <p class="text-muted small mb-0">Not enough data yet.</p>
             <?php endif; ?>
@@ -401,7 +420,8 @@ require_once __DIR__ . '/../includes/admin_header.php';
                 <?php endif; ?>
             </div>
             <?php if ($enrollData): ?>
-                <div style="height:240px;"><canvas id="enrollChart"></canvas></div>
+                <div class="sp-chart-box" style="height:280px;"><canvas id="enrollChart"></canvas></div>
+                <?php echo renderChartInsights(insightsForEnrollment($enrollLabels, $enrollData)); ?>
             <?php else: ?>
                 <p class="text-muted small mb-0">Not enough data yet.</p>
             <?php endif; ?>
@@ -642,6 +662,10 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
+    function spAxisTitle(text) {
+        return { display: true, text: text, color: '#4b5563', font: { size: 12, weight: '600' }, padding: 12 };
+    }
+
     <?php if ($trendData): ?>
     var trendChart = new Chart(document.getElementById('trendChart'), {
         type: 'line',
@@ -663,7 +687,10 @@ document.addEventListener('DOMContentLoaded', function () {
             layout: { padding: { top: 20, right: 10, left: 4, bottom: 4 } },
             clip: false,
             plugins: { legend: { display: false } },
-            scales: { y: { min: 0, max: 100, ticks: { callback: function (v) { return v + '%'; } } } }
+            scales: {
+                x: { title: spAxisTitle('Week') },
+                y: { min: 0, max: 100, ticks: { callback: function (v) { return v + '%'; } }, title: spAxisTitle('Rate (%)') }
+            }
         }
     });
     spWireExportBtn('spExportTrendPdf', trendChart, 'Attendance Rate Trend');
@@ -674,12 +701,15 @@ document.addEventListener('DOMContentLoaded', function () {
         type: 'bar',
         data: {
             labels: <?php echo json_encode($dowLabels); ?>,
-            datasets: [{ label: 'Absences', data: <?php echo json_encode($dowData); ?>, backgroundColor: greenShadesForCount(<?php echo json_encode($dowData); ?>), borderRadius: 6, maxBarThickness: 32 }]
+            datasets: [{ label: 'Absences', data: <?php echo json_encode($dowData); ?>, backgroundColor: greenShadesForCount(<?php echo json_encode($dowData); ?>), borderRadius: 6, maxBarThickness: 40 }]
         },
         options: {
             responsive: true, maintainAspectRatio: false,
             plugins: { legend: { display: false } },
-            scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+            scales: {
+                x: { title: spAxisTitle('Day of Week') },
+                y: { beginAtZero: true, ticks: { precision: 0 }, title: spAxisTitle('Absences') }
+            }
         }
     });
     spWireExportBtn('spExportDowPdf', dowChart, 'Peak Absence Days');
@@ -690,12 +720,15 @@ document.addEventListener('DOMContentLoaded', function () {
         type: 'bar',
         data: {
             labels: <?php echo json_encode($roomLabels); ?>,
-            datasets: [{ label: 'Attendance Rate', data: <?php echo json_encode($roomData); ?>, backgroundColor: greenShadesForPercent(<?php echo json_encode($roomData); ?>), borderRadius: 6, maxBarThickness: 42 }]
+            datasets: [{ label: 'Attendance Rate', data: <?php echo json_encode($roomData); ?>, backgroundColor: greenShadesForPercent(<?php echo json_encode($roomData); ?>), borderRadius: 6, maxBarThickness: 40 }]
         },
         options: {
             responsive: true, maintainAspectRatio: false,
             plugins: { legend: { display: false } },
-            scales: { y: { min: 0, max: 100, ticks: { callback: function (v) { return v + '%'; } } } }
+            scales: {
+                x: { title: spAxisTitle('Room') },
+                y: { min: 0, max: 100, ticks: { callback: function (v) { return v + '%'; } }, title: spAxisTitle('Rate (%)') }
+            }
         }
     });
     spWireExportBtn('spExportRoomPdf', roomChart, 'Attendance Rate by Room');
@@ -706,12 +739,15 @@ document.addEventListener('DOMContentLoaded', function () {
         type: 'bar',
         data: {
             labels: <?php echo json_encode($courseLabels); ?>,
-            datasets: [{ label: 'Attendance Rate', data: <?php echo json_encode($courseData); ?>, backgroundColor: greenShadesForPercent(<?php echo json_encode($courseData); ?>), borderRadius: 6, maxBarThickness: 42 }]
+            datasets: [{ label: 'Attendance Rate', data: <?php echo json_encode($courseData); ?>, backgroundColor: greenShadesForPercent(<?php echo json_encode($courseData); ?>), borderRadius: 6, maxBarThickness: 40 }]
         },
         options: {
             responsive: true, maintainAspectRatio: false,
             plugins: { legend: { display: false } },
-            scales: { y: { min: 0, max: 100, ticks: { callback: function (v) { return v + '%'; } } } }
+            scales: {
+                x: { title: spAxisTitle('Course') },
+                y: { min: 0, max: 100, ticks: { callback: function (v) { return v + '%'; } }, title: spAxisTitle('Rate (%)') }
+            }
         }
     });
     spWireExportBtn('spExportCoursePdf', courseChart, 'Attendance Rate by Course');
@@ -722,13 +758,16 @@ document.addEventListener('DOMContentLoaded', function () {
         type: 'bar',
         data: {
             labels: <?php echo json_encode($teacherLabels); ?>,
-            datasets: [{ label: 'Attendance Rate', data: <?php echo json_encode($teacherData); ?>, backgroundColor: greenShadesForPercent(<?php echo json_encode($teacherData); ?>), borderRadius: 6, maxBarThickness: 42 }]
+            datasets: [{ label: 'Attendance Rate', data: <?php echo json_encode($teacherData); ?>, backgroundColor: greenShadesForPercent(<?php echo json_encode($teacherData); ?>), borderRadius: 6, maxBarThickness: 40 }]
         },
         options: {
             indexAxis: 'y',
             responsive: true, maintainAspectRatio: false,
             plugins: { legend: { display: false } },
-            scales: { x: { min: 0, max: 100, ticks: { callback: function (v) { return v + '%'; } } } }
+            scales: {
+                x: { min: 0, max: 100, ticks: { callback: function (v) { return v + '%'; } }, title: spAxisTitle('Rate (%)') },
+                y: { title: spAxisTitle('Teacher') }
+            }
         }
     });
     spWireExportBtn('spExportTeacherPdf', teacherChart, 'Attendance Rate by Teacher');
@@ -739,12 +778,15 @@ document.addEventListener('DOMContentLoaded', function () {
         type: 'bar',
         data: {
             labels: <?php echo json_encode($hourLabels); ?>,
-            datasets: [{ label: 'Scans', data: <?php echo json_encode($hourData); ?>, backgroundColor: greenShadesForCount(<?php echo json_encode($hourData); ?>), borderRadius: 6, maxBarThickness: 32 }]
+            datasets: [{ label: 'Scans', data: <?php echo json_encode($hourData); ?>, backgroundColor: greenShadesForCount(<?php echo json_encode($hourData); ?>), borderRadius: 6, maxBarThickness: 40 }]
         },
         options: {
             responsive: true, maintainAspectRatio: false,
             plugins: { legend: { display: false } },
-            scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+            scales: {
+                x: { title: spAxisTitle('Time of Day') },
+                y: { beginAtZero: true, ticks: { precision: 0 }, title: spAxisTitle('Scans') }
+            }
         }
     });
     spWireExportBtn('spExportHourPdf', hourChart, 'Peak Scan Times');
@@ -755,12 +797,15 @@ document.addEventListener('DOMContentLoaded', function () {
         type: 'bar',
         data: {
             labels: <?php echo json_encode($enrollLabels); ?>,
-            datasets: [{ label: 'New Students', data: <?php echo json_encode($enrollData); ?>, backgroundColor: greenShadesForCount(<?php echo json_encode($enrollData); ?>), borderRadius: 6, maxBarThickness: 42 }]
+            datasets: [{ label: 'New Students', data: <?php echo json_encode($enrollData); ?>, backgroundColor: greenShadesForCount(<?php echo json_encode($enrollData); ?>), borderRadius: 6, maxBarThickness: 40 }]
         },
         options: {
             responsive: true, maintainAspectRatio: false,
             plugins: { legend: { display: false } },
-            scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+            scales: {
+                x: { title: spAxisTitle('Month') },
+                y: { beginAtZero: true, ticks: { precision: 0 }, title: spAxisTitle('New Students') }
+            }
         }
     });
     spWireExportBtn('spExportEnrollPdf', enrollChart, 'Enrollment Growth');

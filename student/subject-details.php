@@ -53,7 +53,8 @@ if ($nextDateTime < time()) {
 }
 $minutesUntil = round(($nextDateTime - time()) / 60);
 
-$absentCutoff = effectiveAbsentCutoff($subject);
+$policyTimes = attendancePolicyTimes($subject, $subject['start_time'], $subject['end_time']);
+$hasCustomPolicy = hasCustomAttendanceTimes($subject);
 
 require_once __DIR__ . '/../includes/student_header.php';
 renderSubjectPageHeader($subject, 'overview');
@@ -110,15 +111,15 @@ renderSubjectPageHeader($subject, 'overview');
             <h6 class="mb-3">Attendance Policy</h6>
             <div class="sp-policy-item">
                 <span class="sp-policy-dot bg-success"></span>
-                <span>On time or earlier: marked as <strong>Present</strong></span>
+                <span><?php echo $hasCustomPolicy ? 'Before ' . formatTime($policyTimes['late']) : 'On time or earlier'; ?>: marked as <strong>Present</strong></span>
             </div>
             <div class="sp-policy-item">
                 <span class="sp-policy-dot bg-warning"></span>
-                <span>1&ndash;<?php echo $absentCutoff - 1; ?> minutes late: marked as <strong>Late</strong></span>
+                <span><?php echo $hasCustomPolicy ? 'From ' . formatTime($policyTimes['late']) : 'After ' . formatTime($subject['start_time']); ?>: marked as <strong>Late</strong></span>
             </div>
             <div class="sp-policy-item mb-0">
                 <span class="sp-policy-dot bg-danger"></span>
-                <span><?php echo $absentCutoff; ?>+ minutes late or no scan: automatically marked as <strong>Absent</strong></span>
+                <span>From <?php echo formatTime($policyTimes['absent']); ?> or no scan: automatically marked as <strong>Absent</strong></span>
             </div>
         </div>
 <?php require_once __DIR__ . '/../includes/student_footer.php'; ?>

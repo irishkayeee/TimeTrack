@@ -320,6 +320,16 @@ function notifyGuardianOfAttendance($student, $subjectName, $status, $scanTime) 
     return sendMail($student['guardian_email'], $guardianName, $subject, $body);
 }
 
+function sendComposedStudentEmail($student, $subject, $messageText) {
+    $toEmail = $student['email'] ?: $student['guardian_email'];
+    if (empty($toEmail) || !isMailConfigured()) {
+        return false;
+    }
+    $toName = $student['email'] ? trim($student['first_name'] . ' ' . $student['last_name']) : ($student['guardian_name'] ?: 'Guardian');
+    $body = nl2br(htmlspecialchars($messageText)) . '<p>— TimeTrack Attendance System</p>';
+    return sendMail($toEmail, $toName, $subject, $body);
+}
+
 function unreadNotificationCount($studentId) {
     global $mysqli;
     $stmt = $mysqli->prepare('SELECT COUNT(*) FROM notifications WHERE student_id = ? AND is_read = 0');
@@ -636,28 +646,56 @@ function flashCredentialsMessage() {
     return null;
 }
 
-// Present covers arriving on time; Late covers any scan from right after start_time
-// all the way through the end of the class session, plus a grace window past
-// end_time (absentCutoff minutes) — only scanning later than that counts as Absent.
-function computeAttendanceStatus($startTime, $endTime, $scanTime, $absentCutoff = null) {
-    $diffFromStart = (strtotime($scanTime) - strtotime($startTime)) / 60;
-    if ($diffFromStart <= 0) {
-        return 'present';
-    }
-    $absentCutoff = $absentCutoff !== null ? intval($absentCutoff) : intval(getSetting('absent_cutoff_minutes', 20));
-    $absentDeadline = strtotime($endTime ?: $startTime) + $absentCutoff * 60;
-    return strtotime($scanTime) < $absentDeadline ? 'late' : 'absent';
+// True when the class has its own Late/Absent times set (see 013 migration).
+function hasCustomAttendanceTimes($subject) {
+    return isset($subject['late_after_minutes'], $subject['absent_after_minutes']);
 }
 
-function virtualRosterStatus($startTime, $endTime, $nowTime = null, $absentCutoff = null) {
-    $now = $nowTime ?: date('H:i:s');
-    $diffFromStart = (strtotime($now) - strtotime($startTime)) / 60;
-    if ($diffFromStart < 0) {
-        return 'pending';
+// Clock times (H:i:s) at which a scan becomes Late and Absent for a session
+// running $startTime-$endTime. Custom times are offsets from the start, so they
+// follow makeup sessions too; otherwise the school default applies (late right
+// after start, absent N minutes after the class ends).
+function attendancePolicyTimes($subject, $startTime, $endTime) {
+    $startTs = strtotime($startTime);
+    if (hasCustomAttendanceTimes($subject)) {
+        $lateTs = $startTs + intval($subject['late_after_minutes']) * 60;
+        $absentTs = $startTs + intval($subject['absent_after_minutes']) * 60;
+    } else {
+        // +1s keeps a scan exactly at the start time Present, as before.
+        $lateTs = $startTs + 1;
+        $absentTs = strtotime($endTime ?: $startTime) + effectiveAbsentCutoff($subject) * 60;
     }
-    $absentCutoff = $absentCutoff !== null ? intval($absentCutoff) : intval(getSetting('absent_cutoff_minutes', 20));
-    $absentDeadline = strtotime($endTime ?: $startTime) + $absentCutoff * 60;
-    return strtotime($now) < $absentDeadline ? 'pending' : 'absent';
+    return ['late' => date('H:i:s', $lateTs), 'absent' => date('H:i:s', $absentTs)];
+}
+
+// Start/end time of today's session: a makeup session scheduled today replaces the
+// regular weekly times, the same way scan-attendance.php and finalizeAbsencesForSubject do.
+function todaysSessionTimes($mysqli, $subject) {
+    $makeupStart = null;
+    $makeupEnd = null;
+    $stmt = $mysqli->prepare('SELECT start_time, end_time FROM makeup_sessions WHERE subject_id = ? AND session_date = CURDATE() LIMIT 1');
+    $stmt->bind_param('i', $subject['id']);
+    $stmt->execute();
+    $stmt->bind_result($makeupStart, $makeupEnd);
+    $hasMakeup = $stmt->fetch();
+    $stmt->close();
+    return $hasMakeup
+        ? ['start' => $makeupStart, 'end' => $makeupEnd]
+        : ['start' => $subject['start_time'], 'end' => $subject['end_time']];
+}
+
+function computeAttendanceStatus($subject, $startTime, $endTime, $scanTime) {
+    $times = attendancePolicyTimes($subject, $startTime, $endTime);
+    $scanTs = strtotime($scanTime);
+    if ($scanTs < strtotime($times['late'])) {
+        return 'present';
+    }
+    return $scanTs < strtotime($times['absent']) ? 'late' : 'absent';
+}
+
+function virtualRosterStatus($subject, $startTime, $endTime, $nowTime = null) {
+    $times = attendancePolicyTimes($subject, $startTime, $endTime);
+    return strtotime($nowTime ?: date('H:i:s')) < strtotime($times['absent']) ? 'pending' : 'absent';
 }
 
 // Once a class's start time plus its absent-cutoff window has passed for today, any
@@ -687,9 +725,8 @@ function finalizeAbsencesForSubject($mysqli, $subject) {
         return;
     }
 
-    $absentCutoff = $subject['absent_cutoff_minutes'] !== null ? intval($subject['absent_cutoff_minutes']) : intval(getSetting('absent_cutoff_minutes', 20));
-    $cutoffTs = strtotime($todayDate . ' ' . ($effectiveEndTime ?: $effectiveStartTime)) + $absentCutoff * 60;
-    if (time() < $cutoffTs) {
+    $policyTimes = attendancePolicyTimes($subject, $effectiveStartTime, $effectiveEndTime);
+    if (time() < strtotime($todayDate . ' ' . $policyTimes['absent'])) {
         return;
     }
 
@@ -732,7 +769,7 @@ function finalizeAbsencesForSubject($mysqli, $subject) {
 // subjects nobody has opened a live roster/scanner for since the cutoff passed.
 function finalizeTodaysAbsences($mysqli) {
     $today = date('D');
-    $stmt = $mysqli->prepare("SELECT id, room_id, start_time, end_time, day_of_week, absent_cutoff_minutes FROM subjects WHERE status = 'active' AND day_of_week = ?");
+    $stmt = $mysqli->prepare("SELECT id, room_id, start_time, end_time, day_of_week, absent_cutoff_minutes, late_after_minutes, absent_after_minutes FROM subjects WHERE status = 'active' AND day_of_week = ?");
     $stmt->bind_param('s', $today);
     $stmt->execute();
     $subjects = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
@@ -741,7 +778,7 @@ function finalizeTodaysAbsences($mysqli) {
         finalizeAbsencesForSubject($mysqli, $subject);
     }
 
-    $stmt = $mysqli->prepare("SELECT s.id, s.room_id, s.start_time, s.end_time, s.day_of_week, s.absent_cutoff_minutes FROM subjects s JOIN makeup_sessions m ON m.subject_id = s.id WHERE m.session_date = CURDATE() AND s.status = 'active'");
+    $stmt = $mysqli->prepare("SELECT s.id, s.room_id, s.start_time, s.end_time, s.day_of_week, s.absent_cutoff_minutes, s.late_after_minutes, s.absent_after_minutes FROM subjects s JOIN makeup_sessions m ON m.subject_id = s.id WHERE m.session_date = CURDATE() AND s.status = 'active'");
     $stmt->execute();
     $makeupSubjects = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
     $stmt->close();
@@ -752,7 +789,7 @@ function finalizeTodaysAbsences($mysqli) {
 
 function getLiveRosterForSubject($mysqli, $subjectId) {
     $emptyCounts = ['present' => 0, 'late' => 0, 'absent' => 0, 'pending' => 0];
-    $stmt = $mysqli->prepare('SELECT id, teacher_id, room_id, start_time, end_time, day_of_week, absent_cutoff_minutes FROM subjects WHERE id = ? LIMIT 1');
+    $stmt = $mysqli->prepare('SELECT id, teacher_id, room_id, start_time, end_time, day_of_week, absent_cutoff_minutes, late_after_minutes, absent_after_minutes FROM subjects WHERE id = ? LIMIT 1');
     $stmt->bind_param('i', $subjectId);
     $stmt->execute();
     $subject = $stmt->get_result()->fetch_assoc();
@@ -761,6 +798,7 @@ function getLiveRosterForSubject($mysqli, $subjectId) {
         return ['subject' => null, 'rows' => [], 'counts' => $emptyCounts];
     }
     finalizeAbsencesForSubject($mysqli, $subject);
+    $session = todaysSessionTimes($mysqli, $subject);
     $query = 'SELECT s.id AS student_id, s.student_id AS student_code, s.first_name, s.last_name, s.photo,
                      a.status AS scanned_status, a.time AS scan_time
               FROM students s
@@ -774,7 +812,7 @@ function getLiveRosterForSubject($mysqli, $subjectId) {
     $rows = [];
     $counts = $emptyCounts;
     while ($row = $result->fetch_assoc()) {
-        $row['display_status'] = $row['scanned_status'] ?: virtualRosterStatus($subject['start_time'], $subject['end_time'], null, $subject['absent_cutoff_minutes']);
+        $row['display_status'] = $row['scanned_status'] ?: virtualRosterStatus($subject, $session['start'], $session['end']);
         $counts[$row['display_status']]++;
         $rows[] = $row;
     }
@@ -1071,7 +1109,7 @@ function notifyTeacherOfScheduleChange($mysqli, $teacherId, $code, $name, $days,
 }
 
 function renderTeacherClassHeader($subject, $activeTab) {
-    $theme = subjectTheme($subject['id']);
+    $theme = subjectTheme($subject);
     ?>
     <div class="card p-4 mb-3 sp-greeting-card d-flex flex-column justify-content-center" style="min-height: 220px;">
         <div class="d-flex align-items-start gap-3 flex-wrap">
@@ -1105,7 +1143,7 @@ function renderTeacherClassHeader($subject, $activeTab) {
 }
 
 function renderSubjectPageHeader($subject, $activeTab) {
-    $theme = subjectTheme($subject['id']);
+    $theme = subjectTheme($subject);
     ?>
     <a href="subjects.php" class="sp-back-link"><i class="fa-solid fa-arrow-left"></i> Back to Subjects</a>
     <div class="sp-subject-header" style="border-left-color: <?php echo $theme['color']; ?>;">
@@ -1151,10 +1189,61 @@ function renderSubjectPageHeader($subject, $activeTab) {
     <?php
 }
 
-function subjectTheme($subjectId) {
-    $bands = ['#2f6fed', '#f2994a', '#8e44ad', '#149c6d', '#2f6fed', '#3c4b5a'];
+// Cover colors a teacher can pick for a class card: key => [label, main color, gradient end]
+function subjectCoverColors() {
+    return [
+        'emerald' => ['Emerald', '#149c6d', '#0b6e4f'],
+        'forest'  => ['Forest', '#2d6a4f', '#1b4332'],
+        'teal'    => ['Teal', '#0fa3b1', '#077a85'],
+        'ocean'   => ['Ocean', '#2f6fed', '#1b4fb8'],
+        'indigo'  => ['Indigo', '#5b5bd6', '#3a3a9e'],
+        'grape'   => ['Grape', '#8e44ad', '#5b2c83'],
+        'rose'    => ['Rose', '#e05780', '#b83262'],
+        'sunset'  => ['Sunset', '#f2994a', '#e0563b'],
+        'gold'    => ['Gold', '#d4a017', '#a87a00'],
+        'slate'   => ['Slate', '#3c4b5a', '#1f2a35'],
+    ];
+}
+
+// Cover designs (CSS overlay patterns, see .sp-cover--* in student-portal.css)
+function subjectCoverPatterns() {
+    return [
+        'plain'    => 'Plain',
+        'dots'     => 'Dots',
+        'grid'     => 'Grid',
+        'stripes'  => 'Stripes',
+        'waves'    => 'Waves',
+        'bubbles'  => 'Bubbles',
+        'triangles'=> 'Triangles',
+        'glow'     => 'Glow',
+    ];
+}
+
+// Accepts a subject row (uses its saved cover_color / cover_pattern) or a bare id.
+function subjectTheme($subject) {
+    $subjectId = is_array($subject) ? (int) $subject['id'] : (int) $subject;
     $icons = ['fa-database', 'fa-code', 'fa-cubes', 'fa-comments', 'fa-diagram-project', 'fa-chart-column'];
-    return ['color' => $bands[$subjectId % count($bands)], 'icon' => $icons[$subjectId % count($icons)]];
+    $colors = subjectCoverColors();
+    $defaultKeys = ['ocean', 'sunset', 'grape', 'emerald', 'ocean', 'slate'];
+
+    $colorKey = is_array($subject) ? ($subject['cover_color'] ?? null) : null;
+    if (!isset($colors[$colorKey])) {
+        $colorKey = $defaultKeys[$subjectId % count($defaultKeys)];
+    }
+    $patternKey = is_array($subject) ? ($subject['cover_pattern'] ?? null) : null;
+    if (!isset(subjectCoverPatterns()[$patternKey])) {
+        $patternKey = 'plain';
+    }
+    [, $color, $colorEnd] = $colors[$colorKey];
+
+    return [
+        'color' => $color,
+        'icon' => $icons[$subjectId % count($icons)],
+        'color_key' => $colorKey,
+        'pattern' => $patternKey,
+        'band_style' => 'background: linear-gradient(135deg, ' . $color . ' 0%, ' . $colorEnd . ' 100%);',
+        'band_class' => 'sp-cover sp-cover--' . $patternKey,
+    ];
 }
 
 function subjectQrText($studentQrToken, $subjectId) {
@@ -1190,4 +1279,97 @@ function generateStudentQrFile($text, $filePath) {
         @unlink($filePath);
     }
     return QRcode::png($text, $filePath, 'H', 8, 2);
+}
+
+// ---- Dashboard chart insights ----
+
+function insightsForTrend($labels, $data) {
+    $count = count($data);
+    if ($count === 0) {
+        return [];
+    }
+    $latest = end($data);
+    $insights = ['Latest week (' . end($labels) . '): <strong>' . $latest . '%</strong> attendance rate.'];
+    if ($count > 1) {
+        $diff = $latest - $data[$count - 2];
+        if ($diff > 0) {
+            $insights[] = 'Up <strong>' . $diff . ' pts</strong> from the previous week.';
+        } elseif ($diff < 0) {
+            $insights[] = 'Down <strong>' . abs($diff) . ' pts</strong> from the previous week.';
+        } else {
+            $insights[] = 'No change from the previous week.';
+        }
+    }
+    $insights[] = 'Average over ' . $count . ' week' . ($count === 1 ? '' : 's') . ': <strong>' . round(array_sum($data) / $count) . '%</strong>.';
+    return $insights;
+}
+
+function insightsForRateRanking($labels, $data, $noun, $threshold = 75) {
+    $count = count($data);
+    if ($count === 0) {
+        return [];
+    }
+    $maxIdx = array_search(max($data), $data);
+    $minIdx = array_search(min($data), $data);
+    $insights = ['Highest: <strong>' . htmlspecialchars($labels[$maxIdx]) . '</strong> (' . $data[$maxIdx] . '%).'];
+    if ($count > 1) {
+        $insights[] = 'Lowest: <strong>' . htmlspecialchars($labels[$minIdx]) . '</strong> (' . $data[$minIdx] . '%).';
+    }
+    $below = count(array_filter($data, function ($v) use ($threshold) { return $v < $threshold; }));
+    $insights[] = $below > 0
+        ? '<strong>' . $below . '</strong> ' . $noun . ($below === 1 ? '' : 's') . ' below ' . $threshold . '% — may need follow-up.'
+        : 'All ' . $noun . 's are at or above ' . $threshold . '%.';
+    return $insights;
+}
+
+function insightsForPeak($labels, $data, $peakPhrase, $unit) {
+    $total = array_sum($data);
+    if ($total === 0) {
+        return [];
+    }
+    $maxIdx = array_search(max($data), $data);
+    $share = round($data[$maxIdx] / $total * 100);
+    return [
+        ucfirst($peakPhrase) . ': <strong>' . htmlspecialchars($labels[$maxIdx]) . '</strong> (' . $data[$maxIdx] . ' of ' . $total . ' ' . $unit . ', ' . $share . '%).',
+        'Total recorded: <strong>' . $total . '</strong> ' . $unit . '.',
+    ];
+}
+
+function insightsForEnrollment($labels, $data) {
+    $count = count($data);
+    if ($count === 0) {
+        return [];
+    }
+    $insights = ['<strong>' . array_sum($data) . '</strong> new students over the period shown.'];
+    $maxIdx = array_search(max($data), $data);
+    $insights[] = 'Biggest month: <strong>' . htmlspecialchars($labels[$maxIdx]) . '</strong> (' . $data[$maxIdx] . ').';
+    $insights[] = 'Latest month (' . end($labels) . '): <strong>' . end($data) . '</strong> new.';
+    return $insights;
+}
+
+function renderChartInsights($insights) {
+    if (empty($insights)) {
+        return '';
+    }
+    $html = '<div class="sp-insights"><div class="sp-insights-title"><i class="fa-solid fa-lightbulb"></i> Key Insights</div><ul>';
+    foreach ($insights as $line) {
+        $html .= '<li>' . $line . '</li>';
+    }
+    return $html . '</ul></div>';
+}
+
+// Avatar fallback text when there is no profile photo, e.g. "Allen" + "Reyes" -> "AR".
+function nameInitials($firstName, $lastName = '') {
+    $words = preg_split('/\s+/', trim($firstName . ' ' . $lastName), -1, PREG_SPLIT_NO_EMPTY);
+    if (!$words) {
+        return '?';
+    }
+    $initials = mb_substr($words[0], 0, 1);
+    if (trim($lastName) !== '') {
+        $lastWords = preg_split('/\s+/', trim($lastName), -1, PREG_SPLIT_NO_EMPTY);
+        $initials .= mb_substr(end($lastWords), 0, 1);
+    } elseif (count($words) > 1) {
+        $initials .= mb_substr($words[1], 0, 1);
+    }
+    return mb_strtoupper($initials);
 }

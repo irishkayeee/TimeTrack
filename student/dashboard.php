@@ -61,10 +61,11 @@ function attachTodayDisplayStatus($mysqli, $studentDbId, $row) {
     if ($att) {
         $row['display_status'] = $att['status'];
     } else {
-        $minutesSinceStart = (strtotime(date('H:i:s')) - strtotime($row['start_time'])) / 60;
-        if ($minutesSinceStart < 0) {
+        $now = strtotime(date('H:i:s'));
+        $policyTimes = attendancePolicyTimes($row, $row['start_time'], $row['end_time']);
+        if ($now < strtotime($row['start_time'])) {
             $row['display_status'] = 'upcoming';
-        } elseif ($minutesSinceStart < effectiveAbsentCutoff($row)) {
+        } elseif ($now < strtotime($policyTimes['absent'])) {
             $row['display_status'] = 'ongoing';
         } else {
             $row['display_status'] = 'absent';
@@ -140,10 +141,10 @@ $statusMeta = [
 
 require_once __DIR__ . '/../includes/student_header.php';
 ?>
-<div class="card p-4 mb-3">
+<div class="card p-4 mb-3 sp-greeting-card">
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
         <div>
-            <h4 class="mb-1"><span id="spGreetingWord"><?php echo htmlspecialchars($greeting); ?></span>, <?php echo htmlspecialchars($me['first_name']); ?>! 👋</h4>
+            <h4 class="mb-1"><span id="spGreetingWord"><?php echo htmlspecialchars($greeting); ?></span>, <?php echo htmlspecialchars($me['first_name']); ?>! <span class="sp-greeting-wave">👋</span></h4>
             <p class="text-muted mb-2">Here's your attendance overview and class schedule.</p>
             <div class="d-flex flex-wrap gap-2">
                 <span class="sp-shd-pill"><i class="fa-solid fa-user-group"></i> <?php echo htmlspecialchars(trim(($me['course_code'] ?: 'N/A') . ' ' . ($me['room_name'] ?: ''))); ?></span>
