@@ -63,9 +63,18 @@ $users = $mysqli->query("SELECT id, username, email, role, status, created_at FR
 require_once __DIR__ . '/../includes/admin_header.php';
 ?>
 <div class="card rounded-4 shadow-sm p-4">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h4>User Management</h4>
-        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#userModal">Add User</button>
+    <div class="sp-um-toolbar">
+        <div>
+            <h4 class="sp-um-title">User Management</h4>
+            <div class="sp-um-sub"><?php echo (int) $users->num_rows; ?> admin account<?php echo $users->num_rows === 1 ? '' : 's'; ?></div>
+        </div>
+        <div class="sp-um-actions">
+            <label class="sp-um-search" for="usersSearch">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="search" id="usersSearch" placeholder="Search users..." autocomplete="off">
+            </label>
+            <button class="btn sp-um-add" data-bs-toggle="modal" data-bs-target="#userModal"><i class="fa-solid fa-user-plus"></i> Add User</button>
+        </div>
     </div>
     <div class="table-responsive">
         <table class="table table-hover" id="usersTable">
@@ -205,7 +214,8 @@ document.querySelectorAll('.btn-edit-user').forEach(btn => {
         userModal.show();
     });
 });
-$('#usersTable').DataTable({ responsive: true, paging: false, ordering: false, dom: 'frt' });
+const usersTable = $('#usersTable').DataTable({ responsive: true, paging: false, ordering: false, info: false, dom: 'rt' });
+$('#usersSearch').on('input', function () { usersTable.search(this.value).draw(); });
 });
 </script>
 <?php require_once __DIR__ . '/../includes/admin_footer.php'; ?>

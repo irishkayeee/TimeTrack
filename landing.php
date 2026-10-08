@@ -17,7 +17,7 @@ $openLogin = isset($_GET['login']);
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
     <link rel="stylesheet" href="assets/css/theme-tokens.css">
-    <link rel="stylesheet" href="assets/css/landing.css">
+    <link rel="stylesheet" href="assets/css/landing.css?v=<?php echo filemtime(__DIR__ . '/assets/css/landing.css'); ?>">
 </head>
 <body class="landing-body">
 
@@ -250,30 +250,38 @@ $openLogin = isset($_GET['login']);
 <div class="modal fade" id="loginModal" tabindex="-1" aria-labelledby="loginModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content lp-login-modal">
-            <button type="button" class="btn-close lp-login-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            <span class="lp-login-leaf lp-login-leaf--br"><svg viewBox="0 0 120 120" width="130" height="130" fill="currentColor" aria-hidden="true"><path d="M8 112 C40 80 62 52 104 10" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path d="M34 86 C14 80 6 64 10 46 C28 52 38 68 34 86Z"/><path d="M52 64 C34 54 30 36 38 20 C54 30 58 48 52 64Z"/><path d="M42 78 C58 84 76 78 86 62 C68 58 52 64 42 78Z"/><path d="M64 50 C80 54 96 46 104 30 C86 28 72 36 64 50Z"/></svg></span>
+            <button type="button" class="lp-login-close" data-bs-dismiss="modal" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
             <div class="modal-body text-center">
                 <img src="assets/images/iblogo.png" alt="TimeTrack logo" class="lp-login-logo">
                 <h4 class="lp-login-title" id="loginModalLabel">Welcome Back!</h4>
                 <p class="lp-login-subtitle">Sign in to continue to TimeTrack</p>
+                <div class="lp-login-divider" aria-hidden="true"><span></span><i class="fa-solid fa-seedling"></i><span></span></div>
                 <?php if ($flash): ?>
-                    <div class="alert alert-<?php echo htmlspecialchars($flash['type']); ?>"><?php echo htmlspecialchars($flash['message']); ?></div>
+                    <div class="alert alert-<?php echo htmlspecialchars($flash['type']); ?> lp-login-alert"><?php echo htmlspecialchars($flash['message']); ?></div>
                 <?php endif; ?>
-                <form action="login.php" method="post" class="text-start">
+                <form action="login.php" method="post" class="text-start" id="loginForm">
                     <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
-                    <div class="lp-login-field mb-3">
-                        <i class="fa-solid fa-envelope"></i>
-                        <input type="text" name="username" class="form-control" placeholder="Email or Student ID" required>
-                    </div>
-                    <div class="lp-login-field lp-login-field-password mb-3">
-                        <i class="fa-solid fa-lock"></i>
-                        <input type="password" name="password" id="loginPassword" class="form-control" placeholder="Password" required>
-                        <button type="button" class="lp-login-eye" id="toggleLoginPassword"><i class="fa-solid fa-eye"></i></button>
-                    </div>
-                    <div class="d-flex justify-content-end align-items-center mb-3">
+                    <label class="lp-login-field mb-3">
+                        <span class="lp-login-field__icon"><i class="fa-solid fa-envelope"></i></span>
+                        <input type="text" name="username" placeholder="Email or Student ID" autocomplete="username" required>
+                    </label>
+                    <label class="lp-login-field mb-2">
+                        <span class="lp-login-field__icon"><i class="fa-solid fa-lock"></i></span>
+                        <input type="password" name="password" id="loginPassword" placeholder="Password" autocomplete="current-password" required>
+                        <button type="button" class="lp-login-eye" id="toggleLoginPassword" aria-label="Show password"><i class="fa-solid fa-eye"></i></button>
+                    </label>
+                    <div class="d-flex justify-content-end mb-4">
                         <a href="forgot-password.php" class="lp-login-forgot"><i class="fa-solid fa-key"></i> Forgot Password?</a>
                     </div>
-                    <button type="submit" class="lp-login-submit w-100">Login <i class="fa-solid fa-arrow-right"></i></button>
+                    <button type="submit" class="lp-login-submit" id="loginSubmit">
+                        <span class="lp-login-submit__icon"><i class="fa-solid fa-arrow-right"></i></span>
+                        <span class="lp-login-submit__sep"></span>
+                        <span class="lp-login-submit__text">Login</span>
+                    </button>
                 </form>
+                <div class="lp-login-divider lp-login-divider--bottom" aria-hidden="true"><span></span><i class="fa-solid fa-seedling"></i><span></span></div>
+                <div class="lp-login-trust"><i class="fa-solid fa-lock"></i> Secure &bull; Safe &bull; Trusted</div>
             </div>
         </div>
     </div>
@@ -288,6 +296,16 @@ $openLogin = isset($_GET['login']);
             var isHidden = loginPassword.type === 'password';
             loginPassword.type = isHidden ? 'text' : 'password';
             this.innerHTML = isHidden ? '<i class="fa-solid fa-eye-slash"></i>' : '<i class="fa-solid fa-eye"></i>';
+            this.setAttribute('aria-label', isHidden ? 'Hide password' : 'Show password');
+        });
+    }
+    var loginForm = document.getElementById('loginForm');
+    if (loginForm) {
+        loginForm.addEventListener('submit', function () {
+            var btn = document.getElementById('loginSubmit');
+            btn.disabled = true;
+            btn.querySelector('.lp-login-submit__icon').innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>';
+            btn.querySelector('.lp-login-submit__text').textContent = 'Signing in...';
         });
     }
     <?php if ($openLogin || $flash): ?>

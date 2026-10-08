@@ -811,32 +811,34 @@ document.addEventListener('DOMContentLoaded', function () {
 
 <div class="modal fade" id="spEmailComposeModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content rounded-4">
+        <div class="modal-content rounded-4 border-0 sp-compose-modal">
             <form method="post" id="spEmailComposeForm">
-                <div class="modal-header">
-                    <h5 class="modal-title"><i class="fa-solid fa-envelope me-2"></i>Compose Email</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                <div class="sp-compose-header">
+                    <button type="button" class="sp-compose-close" data-bs-dismiss="modal" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+                    <h5 class="sp-compose-title">Compose Email</h5>
+                    <p class="sp-compose-subtitle">Send a message straight to your student's inbox.</p>
                 </div>
-                <div class="modal-body">
+                <div class="sp-compose-icon"><i class="fa-solid fa-envelope"></i></div>
+                <div class="sp-compose-body">
                     <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
                     <input type="hidden" name="action" value="send_at_risk_email">
                     <input type="hidden" name="student_id" id="spEmailStudentId">
-                    <div class="mb-3">
-                        <label class="form-label">To</label>
-                        <input type="text" class="form-control" id="spEmailTo" disabled>
+                    <div class="sp-compose-field">
+                        <i class="fa-solid fa-user"></i>
+                        <input type="text" id="spEmailTo" aria-label="Recipient" disabled>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label">Subject</label>
-                        <input type="text" class="form-control" name="subject" id="spEmailSubject" maxlength="150" required>
+                    <div class="sp-compose-field">
+                        <i class="fa-solid fa-tag"></i>
+                        <input type="text" name="subject" id="spEmailSubject" aria-label="Subject" placeholder="Subject" maxlength="150" required>
                     </div>
-                    <div class="mb-0">
-                        <label class="form-label">Message</label>
-                        <textarea class="form-control" name="message" id="spEmailMessage" rows="6" maxlength="3000" required></textarea>
+                    <div class="sp-compose-field sp-compose-field--textarea">
+                        <i class="fa-solid fa-pen"></i>
+                        <textarea name="message" id="spEmailMessage" aria-label="Message" placeholder="Your message" rows="6" maxlength="3000" required></textarea>
                     </div>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" id="spEmailCancelBtn">Cancel</button>
-                    <button type="submit" class="btn btn-primary" id="spEmailSendBtn"><i class="fa-solid fa-paper-plane me-1"></i>Send</button>
+                <div class="sp-compose-footer">
+                    <button type="button" class="btn sp-compose-cancel" data-bs-dismiss="modal" id="spEmailCancelBtn">Cancel</button>
+                    <button type="submit" class="btn sp-compose-send" id="spEmailSendBtn"><i class="fa-solid fa-paper-plane me-2"></i>Send Message</button>
                 </div>
             </form>
         </div>
@@ -848,15 +850,26 @@ document.addEventListener('DOMContentLoaded', function () {
     var form = document.getElementById('spEmailComposeForm');
     var sendBtn = document.getElementById('spEmailSendBtn');
     var cancelBtn = document.getElementById('spEmailCancelBtn');
+    var modalEl = document.getElementById('spEmailComposeModal');
+    var closeBtn = modalEl.querySelector('[data-bs-dismiss="modal"]:not(#spEmailCancelBtn)');
     var idleHtml = sendBtn.innerHTML;
+    var isSending = false;
 
     function setSending(sending) {
+        isSending = sending;
         sendBtn.disabled = sending;
         cancelBtn.disabled = sending;
+        if (closeBtn) closeBtn.disabled = sending;
+        modalEl.classList.toggle('sp-compose-sending', sending);
         sendBtn.innerHTML = sending
             ? '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Sending...'
             : idleHtml;
     }
+
+    // Once sending has started the modal can't be closed (Esc, backdrop click or the X)
+    modalEl.addEventListener('hide.bs.modal', function (e) {
+        if (isSending) e.preventDefault();
+    });
 
     form.addEventListener('submit', function (e) {
         if (sendBtn.disabled) { e.preventDefault(); return; }

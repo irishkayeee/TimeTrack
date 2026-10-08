@@ -20,6 +20,7 @@ if (($adminUser['role'] ?? '') === 'superadmin') {
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/datatables.net-bs5/2.3.8/dataTables.bootstrap5.min.css" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&display=swap">
     <link rel="stylesheet" href="../assets/css/theme-tokens.css">
     <link rel="stylesheet" href="../assets/css/dashboard-theme.css">
     <link rel="stylesheet" href="../assets/css/student-portal.css?v=<?php echo filemtime(__DIR__ . '/../assets/css/student-portal.css'); ?>">
@@ -75,9 +76,33 @@ if (($adminUser['role'] ?? '') === 'superadmin') {
                         </div>
                         <i class="fa-solid fa-chevron-down sp-user-caret"></i>
                     </div>
-                    <ul class="dropdown-menu dropdown-menu-end shadow-sm">
-                        <li><a class="dropdown-item" href="profile.php"><i class="fa-solid fa-user me-2 text-muted"></i>Profile</a></li>
-                        <li><a class="dropdown-item" href="settings.php"><i class="fa-solid fa-gear me-2 text-muted"></i>Settings</a></li>
+                    <ul class="dropdown-menu dropdown-menu-end sp-user-menu">
+                        <li class="sp-user-menu__head">
+                            <span class="sp-user-initials"><?php echo htmlspecialchars(nameInitials($adminUser['username'] ?? 'Admin')); ?></span>
+                            <div>
+                                <div class="sp-user-menu__name"><?php echo htmlspecialchars($adminUser['username'] ?? 'Admin'); ?></div>
+                                <div class="sp-user-menu__role"><?php echo htmlspecialchars(ucfirst($adminUser['role'] ?? 'admin')); ?></div>
+                            </div>
+                        </li>
+                        <li>
+                            <a class="dropdown-item sp-user-menu__item" href="profile.php">
+                                <span class="sp-user-menu__icon"><i class="fa-solid fa-user"></i></span>
+                                <span><span class="sp-user-menu__label">Profile</span><span class="sp-user-menu__hint">View and edit your account</span></span>
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item sp-user-menu__item" href="settings.php">
+                                <span class="sp-user-menu__icon"><i class="fa-solid fa-gear"></i></span>
+                                <span><span class="sp-user-menu__label">Settings</span><span class="sp-user-menu__hint">School and system preferences</span></span>
+                            </a>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <a class="dropdown-item sp-user-menu__item sp-user-menu__item--danger" href="#" data-bs-toggle="modal" data-bs-target="#logoutConfirmModal">
+                                <span class="sp-user-menu__icon"><i class="fa-solid fa-right-from-bracket"></i></span>
+                                <span class="sp-user-menu__label">Logout</span>
+                            </a>
+                        </li>
                     </ul>
                 </div>
             </div>

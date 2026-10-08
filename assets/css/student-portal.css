@@ -3240,12 +3240,7 @@ a.sp-risk-name {
 .sp-flash-warning { border-top-color: #e08b1d; }
 
 .modal-dialog.modal-sm:has(.modal-content.text-center) {
-    --bs-modal-width: 300px;
-}
-
-.modal-sm .modal-content.text-center {
-    aspect-ratio: 1 / 1;
-    justify-content: center;
+    --bs-modal-width: 320px;
 }
 
 .sp-welcome-card {
@@ -3257,4 +3252,416 @@ a.sp-risk-name {
     align-items: center;
     justify-content: center;
     padding: 2rem;
+}
+
+/* ===== Admin user management toolbar ===== */
+
+.sp-um-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.sp-um-title {
+    margin: 0;
+    font-weight: 700;
+    color: var(--lp-dark-green, #1b4332);
+}
+
+.sp-um-sub {
+    margin-top: 0.15rem;
+    font-size: 0.82rem;
+    color: #7c8a81;
+}
+
+.sp-um-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.sp-um-search {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    margin: 0;
+    padding: 0 0.95rem;
+    height: 42px;
+    min-width: 260px;
+    border: 1.5px solid #d6e6dc;
+    border-radius: 999px;
+    background: #f6faf7;
+    cursor: text;
+    transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.sp-um-search i {
+    color: #8a978f;
+    font-size: 0.9rem;
+}
+
+.sp-um-search input {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    font-size: 0.9rem;
+    color: #2f3d35;
+}
+
+.sp-um-search:focus-within {
+    border-color: #2d6a4f;
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(45, 106, 79, 0.12);
+}
+
+.sp-um-search:focus-within i {
+    color: #2d6a4f;
+}
+
+.sp-um-add {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    height: 42px;
+    padding: 0 1.15rem;
+    border: 0;
+    border-radius: 999px;
+    background: var(--lp-dark-green, #1b4332);
+    color: #fff;
+    font-weight: 600;
+    box-shadow: 0 6px 14px rgba(27, 67, 50, 0.18);
+}
+
+.sp-um-add:hover,
+.sp-um-add:focus {
+    background: #143326;
+    color: #fff;
+}
+
+@media (max-width: 576px) {
+    .sp-um-actions,
+    .sp-um-search {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .sp-um-add {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+/* ===== Compose Email modal — envelope-style header ===== */
+
+.sp-compose-modal {
+    overflow: hidden;
+}
+
+.sp-compose-header {
+    position: relative;
+    background: linear-gradient(135deg, var(--lp-mid-green), var(--lp-dark-green));
+    color: #fff;
+    text-align: center;
+    padding: 1.9rem 2.5rem 3.2rem;
+    clip-path: polygon(0 0, 100% 0, 100% 60%, 50% 100%, 0 60%);
+}
+
+.sp-compose-title {
+    font-weight: 800;
+    font-size: 1.35rem;
+    margin-bottom: 0.35rem;
+}
+
+.sp-compose-subtitle {
+    font-size: 0.85rem;
+    opacity: 0.92;
+    margin: 0 auto;
+    max-width: 300px;
+    line-height: 1.4;
+}
+
+.sp-compose-close {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255, 255, 255, 0.92);
+    color: var(--lp-dark-green);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+}
+
+.sp-compose-icon {
+    position: relative;
+    z-index: 2;
+    width: 58px;
+    height: 58px;
+    margin: -29px auto 0;
+    border-radius: 50%;
+    background: var(--lp-dark-green);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.3rem;
+    border: 4px solid #fff;
+    box-shadow: 0 10px 20px rgba(27, 67, 50, 0.3);
+}
+
+.sp-compose-body {
+    background: #faf9f4;
+    padding: 1.6rem 1.75rem 1.4rem;
+}
+
+.sp-compose-field {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    background: #fff;
+    border: 1px solid #e7e2d6;
+    border-radius: 1rem;
+    padding: 0.7rem 1rem;
+    margin-bottom: 0.85rem;
+}
+
+.sp-compose-field:focus-within {
+    border-color: var(--lp-soft-green);
+    box-shadow: 0 0 0 3px rgba(116, 198, 157, 0.2);
+}
+
+.sp-compose-field i {
+    color: #9aa79e;
+    flex-shrink: 0;
+    width: 16px;
+    text-align: center;
+}
+
+.sp-compose-field input,
+.sp-compose-field textarea {
+    border: none;
+    outline: none;
+    background: transparent;
+    flex: 1;
+    font-size: 0.92rem;
+    color: #2b332e;
+    resize: none;
+    width: 100%;
+}
+
+.sp-compose-field textarea {
+    scrollbar-width: thin;
+    scrollbar-color: var(--lp-soft-green) transparent;
+}
+
+.sp-compose-field textarea::-webkit-scrollbar {
+    width: 6px;
+}
+
+.sp-compose-field textarea::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.sp-compose-field textarea::-webkit-scrollbar-thumb {
+    background: var(--lp-soft-green);
+    border-radius: 999px;
+}
+
+.sp-compose-field textarea::-webkit-scrollbar-thumb:hover {
+    background: var(--lp-mid-green);
+}
+
+.sp-compose-field input:disabled {
+    color: #6c7a71;
+}
+
+.sp-compose-field--textarea {
+    align-items: flex-start;
+}
+
+.sp-compose-field--textarea i {
+    margin-top: 0.2rem;
+}
+
+.sp-compose-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.6rem;
+    padding: 1.1rem 1.75rem 1.5rem;
+    border-top: 1px dashed #ddd6c5;
+    background: #faf9f4;
+}
+
+.sp-compose-cancel {
+    border: 1px solid #d8d2c2;
+    border-radius: 2rem;
+    padding: 0.6rem 1.4rem;
+    color: #6c7a71;
+    background: #fff;
+}
+
+.sp-compose-cancel:hover {
+    background: #f3f1ea;
+    color: #4a564e;
+}
+
+.sp-compose-send {
+    background: linear-gradient(135deg, var(--lp-mid-green), var(--lp-dark-green));
+    color: #fff;
+    border: none;
+    border-radius: 2rem;
+    padding: 0.6rem 1.6rem;
+    font-weight: 600;
+    box-shadow: 0 10px 20px rgba(27, 67, 50, 0.25);
+    transition: box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.sp-compose-send:hover {
+    color: #fff;
+    box-shadow: 0 14px 26px rgba(27, 67, 50, 0.35);
+    transform: translateY(-1px);
+}
+
+/* Admin top-right user dropdown */
+.sp-user-caret {
+    transition: transform 0.2s ease;
+}
+
+.sp-user-toggle[aria-expanded="true"] .sp-user-caret {
+    transform: rotate(180deg);
+}
+
+.sp-user-menu {
+    min-width: 250px;
+    padding: 0.5rem;
+    margin-top: 0.5rem !important;
+    border: 1px solid #e6efe9;
+    border-radius: 1rem;
+    box-shadow: 0 18px 40px rgba(13, 40, 28, 0.14);
+}
+
+.sp-user-menu.show {
+    animation: spUserMenuIn 0.16s ease-out;
+}
+
+@keyframes spUserMenuIn {
+    from { opacity: 0; transform: translateY(-6px); }
+    to { opacity: 1; transform: none; }
+}
+
+.sp-user-menu__head {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0.6rem 0.65rem 0.75rem;
+    margin-bottom: 0.35rem;
+    border-bottom: 1px solid #edf2ef;
+}
+
+.sp-user-menu__head .sp-user-initials {
+    width: 40px;
+    height: 40px;
+    font-size: 0.9rem;
+}
+
+.sp-user-menu__name {
+    font-weight: 700;
+    color: #1c2b23;
+    line-height: 1.2;
+}
+
+.sp-user-menu__role {
+    font-size: 0.75rem;
+    color: #7c8a81;
+}
+
+.sp-user-menu__item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.55rem 0.65rem;
+    border-radius: 0.7rem;
+    color: #1c2b23;
+    transition: background 0.15s ease;
+}
+
+.sp-user-menu__item:hover,
+.sp-user-menu__item:focus {
+    background: var(--lp-pale-green);
+    color: var(--lp-dark-green);
+}
+
+.sp-user-menu__icon {
+    width: 34px;
+    height: 34px;
+    flex-shrink: 0;
+    border-radius: 0.6rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--lp-pale-green);
+    color: var(--lp-dark-green);
+    font-size: 0.9rem;
+}
+
+.sp-user-menu__item:hover .sp-user-menu__icon {
+    background: #fff;
+}
+
+.sp-user-menu__label {
+    display: block;
+    font-weight: 600;
+    font-size: 0.9rem;
+    line-height: 1.2;
+}
+
+.sp-user-menu__hint {
+    display: block;
+    font-size: 0.74rem;
+    color: #7c8a81;
+}
+
+.sp-user-menu .dropdown-divider {
+    margin: 0.35rem 0.2rem;
+    border-color: #edf2ef;
+    opacity: 1;
+}
+
+.sp-user-menu__item--danger,
+.sp-user-menu__item--danger:hover,
+.sp-user-menu__item--danger:focus {
+    color: #c0392b;
+}
+
+.sp-user-menu__item--danger:hover,
+.sp-user-menu__item--danger:focus {
+    background: rgba(224, 72, 62, 0.08);
+}
+
+.sp-user-menu__item--danger .sp-user-menu__icon {
+    background: rgba(224, 72, 62, 0.1);
+    color: #e0483e;
+}
+
+/* Compose email: locked while sending */
+.sp-compose-sending .sp-compose-close,
+.sp-compose-sending .sp-compose-cancel {
+    opacity: 0.45;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.sp-compose-sending .modal-body {
+    pointer-events: none;
+    opacity: 0.75;
 }

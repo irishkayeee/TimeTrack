@@ -57,8 +57,7 @@ function resolveAnalyticsDateRange($range, $customFrom, $customTo, $schoolYearSe
 
 // Builds a " WHERE ..." (or " AND ...") clause combining the Program and Range
 // filters for one query. $dateCol is the attendance date column as referenced
-// in that query (e.g. 'date' or 'a.date'); pass null to skip the date filter
-// (the Enrollment Growth chart filters students.created_at separately).
+// in that query (e.g. 'date' or 'a.date'); pass null to skip the date filter.
 function analyticsFilterClause($courseCol, $courseFilterId, $dateCol, $rangeFrom, $rangeTo, $mysqli, $prefix = 'WHERE') {
     $clauses = [];
     if ($courseFilterId) {
@@ -148,17 +147,36 @@ while ($row = $hourResult->fetch_assoc()) {
     $hourData[] = (int) $row['cnt'];
 }
 
-$enrollLabels = [];
-$enrollData = [];
-$enrollSql = "SELECT DATE_FORMAT(created_at, '%Y-%m') AS ym, COUNT(*) AS cnt FROM students WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)" . ($courseFilterId ? " AND course_id = $courseFilterId" : '') . ' GROUP BY ym ORDER BY ym';
-$enrollResult = $mysqli->query($enrollSql);
-while ($row = $enrollResult->fetch_assoc()) {
-    $enrollLabels[] = date('M Y', strtotime($row['ym'] . '-01'));
-    $enrollData[] = (int) $row['cnt'];
-}
-
-$atRiskSql = "SELECT s.id, s.first_name, s.last_name, s.student_id, c.code AS course_code, sec.room_name, SUM(a.status = 'absent') AS absents, SUM(a.status = 'late') AS lates, COUNT(a.id) AS total FROM attendance a JOIN students s ON a.student_id = s.id LEFT JOIN courses c ON s.course_id = c.id LEFT JOIN rooms sec ON s.room_id = sec.id" . analyticsFilterClause('a.course_id', $courseFilterId, 'a.date', $rangeFrom, $rangeTo, $mysqli) . " GROUP BY s.id HAVING (SUM(a.status = 'absent') + SUM(a.status = 'late')) > 0 ORDER BY (SUM(a.status = 'absent') * 2 + SUM(a.status = 'late')) DESC LIMIT 10";
+$atRiskSql = "SELECT s.id, s.first_name, s.last_name, s.student_id, s.email, s.guardian_name, s.guardian_email, c.code AS course_code, sec.room_name, SUM(a.status = 'absent') AS absents, SUM(a.status = 'late') AS lates, COUNT(a.id) AS total FROM attendance a JOIN students s ON a.student_id = s.id LEFT JOIN courses c ON s.course_id = c.id LEFT JOIN rooms sec ON s.room_id = sec.id" . analyticsFilterClause('a.course_id', $courseFilterId, 'a.date', $rangeFrom, $rangeTo, $mysqli) . " GROUP BY s.id HAVING (SUM(a.status = 'absent') + SUM(a.status = 'late')) > 0 ORDER BY (SUM(a.status = 'absent') * 2 + SUM(a.status = 'late')) DESC LIMIT 10";
 $atRiskResult = $mysqli->query($atRiskSql);
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'send_at_risk_email') {
+    if (!verifyCsrf($_POST['csrf_token'] ?? '')) {
+        flash('Invalid request.', 'danger');
+        redirect('dashboard.php');
+    }
+    $studentId = (int) ($_POST['student_id'] ?? 0);
+    $emailSubject = trim($_POST['subject'] ?? '');
+    $emailMessage = trim($_POST['message'] ?? '');
+    $checkStmt = $mysqli->prepare('SELECT id, first_name, last_name, email, guardian_name, guardian_email FROM students WHERE id = ?');
+    $checkStmt->bind_param('i', $studentId);
+    $checkStmt->execute();
+    $student = $checkStmt->get_result()->fetch_assoc();
+    $checkStmt->close();
+
+    if (!$student) {
+        flash('Student not found.', 'danger');
+    } elseif (empty($student['email']) && empty($student['guardian_email'])) {
+        flash('No email on file for this student.', 'warning');
+    } elseif ($emailSubject === '' || $emailMessage === '') {
+        flash('Subject and message are required.', 'danger');
+    } elseif (sendComposedStudentEmail($student, $emailSubject, $emailMessage)) {
+        flash('Email sent to ' . trim($student['first_name'] . ' ' . $student['last_name']) . '.', 'success');
+    } else {
+        flash('Could not send email. Check mail settings.', 'danger');
+    }
+    redirect('dashboard.php');
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'export_at_risk_pdf') {
     if (!verifyCsrf($_POST['csrf_token'] ?? '')) {
@@ -214,7 +232,7 @@ require_once __DIR__ . '/../includes/admin_header.php';
 </script>
 <?php $attendanceTodayPct = $studentsCount ? min(100, round($attendanceToday / $studentsCount * 100)) : 0; ?>
 <div class="row g-3">
-    <div class="col-6 col-lg">
+    <div class="col-6 col-lg-3">
         <div class="stat-card-v2 stat-card-v2--green" data-bs-toggle="modal" data-bs-target="#studentsListModal">
             <div class="stat-card-v2__top">
                 <span class="stat-card-v2__icon"><i class="fa-solid fa-user-graduate"></i></span>
@@ -225,7 +243,7 @@ require_once __DIR__ . '/../includes/admin_header.php';
             <div class="stat-card-v2__sublabel">Total enrolled</div>
         </div>
     </div>
-    <div class="col-6 col-lg">
+    <div class="col-6 col-lg-3">
         <div class="stat-card-v2 stat-card-v2--blue" data-bs-toggle="modal" data-bs-target="#teachersListModal">
             <div class="stat-card-v2__top">
                 <span class="stat-card-v2__icon"><i class="fa-solid fa-chalkboard-user"></i></span>
@@ -236,7 +254,7 @@ require_once __DIR__ . '/../includes/admin_header.php';
             <div class="stat-card-v2__sublabel">Total active</div>
         </div>
     </div>
-    <div class="col-6 col-lg">
+    <div class="col-6 col-lg-3">
         <div class="stat-card-v2 stat-card-v2--purple" data-bs-toggle="modal" data-bs-target="#coursesListModal">
             <div class="stat-card-v2__top">
                 <span class="stat-card-v2__icon"><i class="fa-solid fa-graduation-cap"></i></span>
@@ -247,7 +265,7 @@ require_once __DIR__ . '/../includes/admin_header.php';
             <div class="stat-card-v2__sublabel">Offered this term</div>
         </div>
     </div>
-    <div class="col-6 col-lg">
+    <div class="col-6 col-lg-3">
         <div class="stat-card-v2 stat-card-v2--orange" data-bs-toggle="modal" data-bs-target="#roomsListModal">
             <div class="stat-card-v2__top">
                 <span class="stat-card-v2__icon"><i class="fa-solid fa-people-group"></i></span>
@@ -258,7 +276,10 @@ require_once __DIR__ . '/../includes/admin_header.php';
             <div class="stat-card-v2__sublabel">Available</div>
         </div>
     </div>
-    <div class="col-6 col-lg">
+</div>
+
+<div class="row g-3 mt-1">
+    <div class="col-md-6">
         <div class="stat-card-v2 stat-card-v2--teal" data-bs-toggle="modal" data-bs-target="#attendanceTodayListModal">
             <div class="stat-card-v2__top">
                 <span class="stat-card-v2__icon"><i class="fa-solid fa-clipboard-check"></i></span>
@@ -270,10 +291,7 @@ require_once __DIR__ . '/../includes/admin_header.php';
             <div class="stat-card-v2__sublabel"><?php echo $attendanceTodayPct; ?>% of students</div>
         </div>
     </div>
-</div>
-
-<div class="row g-3 mt-1">
-    <div class="col-6 col-lg-4">
+    <div class="col-md-6">
         <div class="stat-card-v2 stat-card-v2--rose">
             <div class="stat-card-v2__top">
                 <span class="stat-card-v2__icon"><i class="fa-solid fa-envelope-circle-check"></i></span>
@@ -286,8 +304,96 @@ require_once __DIR__ . '/../includes/admin_header.php';
     </div>
 </div>
 
+<div class="row g-3 mt-1">
+    <div class="col-lg-12">
+        <div class="card sp-risk-card">
+            <div class="sp-risk-head">
+                <div class="sp-risk-title">
+                    <span class="sp-risk-title__icon"><i class="fa-solid fa-clipboard-list"></i></span>
+                    <div>
+                        <h5 class="sp-risk-title__text sp-script-title">At-Risk Students</h5>
+                        <div class="sp-risk-title__sub">Most late/absent across all classes</div>
+                    </div>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="sp-risk-total"><i class="fa-solid fa-user-clock"></i> Total: <?php echo (int) $atRiskResult->num_rows; ?></span>
+                    <?php if ($atRiskResult->num_rows > 0): ?>
+                        <form method="post" class="d-inline-block">
+                            <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
+                            <input type="hidden" name="action" value="export_at_risk_pdf">
+                            <input type="hidden" name="course_id" value="<?php echo $courseFilterId; ?>">
+                            <input type="hidden" name="range" value="<?php echo htmlspecialchars($rangeFilter); ?>">
+                            <input type="hidden" name="date_from" value="<?php echo htmlspecialchars($customFromInput); ?>">
+                            <input type="hidden" name="date_to" value="<?php echo htmlspecialchars($customToInput); ?>">
+                            <button type="submit" class="btn btn-sm sp-export-btn" title="Export as PDF"><i class="fa-solid fa-file-pdf"></i></button>
+                        </form>
+                    <?php endif; ?>
+                </div>
+            </div>
+            <?php if ($atRiskResult->num_rows === 0): ?>
+                <p class="text-muted small mb-0">No at-risk students right now.</p>
+            <?php else: ?>
+                <div class="sp-risk-table-wrap table-responsive">
+                    <table class="sp-risk-table">
+                        <thead>
+                            <tr>
+                                <th>Student</th>
+                                <th>Course/Room</th>
+                                <th class="text-center">Absent</th>
+                                <th class="text-center">Late</th>
+                                <th class="text-center">Records</th>
+                                <th class="text-end">Attendance</th>
+                                <th class="text-center">Email</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php while ($row = $atRiskResult->fetch_assoc()): ?>
+                                <?php $riskRate = $row['total'] ? round(($row['total'] - $row['absents']) / $row['total'] * 100) : 0; ?>
+                                <?php $riskEmail = $row['email'] ?: $row['guardian_email']; ?>
+                                <?php $riskPlace = trim(($row['course_code'] ?: '') . ' ' . ($row['room_name'] ?: '')); ?>
+                                <tr class="sp-risk-row">
+                                    <td>
+                                        <span class="sp-risk-name"><?php echo htmlspecialchars(trim($row['first_name'] . ' ' . $row['last_name'])); ?></span>
+                                        <div class="sp-risk-meta"><?php echo htmlspecialchars($row['student_id'] ?: '-'); ?></div>
+                                    </td>
+                                    <td>
+                                        <?php if ($riskPlace !== ''): ?>
+                                            <span class="sp-risk-pill sp-risk-pill--room"><i class="fa-solid fa-door-open"></i> <?php echo htmlspecialchars($riskPlace); ?></span>
+                                        <?php else: ?>
+                                            <span class="text-muted">&mdash;</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td class="text-center"><span class="sp-risk-pill sp-risk-pill--absent"><?php echo (int) $row['absents']; ?></span></td>
+                                    <td class="text-center"><span class="sp-risk-pill sp-risk-pill--late"><?php echo (int) $row['lates']; ?></span></td>
+                                    <td class="text-center"><span class="sp-risk-pill sp-risk-pill--neutral"><?php echo (int) $row['total']; ?></span></td>
+                                    <td class="text-end sp-risk-rate"><?php echo $riskRate; ?>%</td>
+                                    <td class="text-center">
+                                        <?php if ($riskEmail): ?>
+                                            <button type="button" class="btn btn-sm sp-export-btn sp-email-trigger"
+                                                data-student-id="<?php echo (int) $row['id']; ?>"
+                                                data-student-name="<?php echo htmlspecialchars(trim($row['first_name'] . ' ' . $row['last_name'])); ?>"
+                                                data-email="<?php echo htmlspecialchars($riskEmail); ?>"
+                                                data-absents="<?php echo (int) $row['absents']; ?>"
+                                                data-lates="<?php echo (int) $row['lates']; ?>"
+                                                title="Compose email to <?php echo htmlspecialchars($riskEmail); ?>">
+                                                <i class="fa-solid fa-envelope"></i>
+                                            </button>
+                                        <?php else: ?>
+                                            <span class="text-muted" title="No email on file">&mdash;</span>
+                                        <?php endif; ?>
+                                    </td>
+                                </tr>
+                            <?php endwhile; ?>
+                        </tbody>
+                    </table>
+                </div>
+            <?php endif; ?>
+        </div>
+    </div>
+</div>
+
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-4 mb-3">
-    <h4 class="mb-0">Analytics</h4>
+    <h4 class="mb-0 sp-script-title">Analytics</h4>
     <form method="get" class="d-flex align-items-center flex-wrap gap-2 mb-0" id="analyticsFilterForm">
         <label class="small text-muted mb-0" for="analyticsCourseFilter">Program:</label>
         <select class="form-select form-select-sm sp-filter-select" name="course_id" id="analyticsCourseFilter" onchange="this.form.submit()" style="width:auto;">
@@ -319,9 +425,12 @@ require_once __DIR__ . '/../includes/admin_header.php';
         <div class="card p-3 h-100">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h6 class="mb-0">Attendance Rate Trend <span class="text-muted small fw-normal">(last 8 weeks)</span></h6>
-                <?php if ($trendData): ?>
-                    <button type="button" class="btn btn-sm sp-export-btn" id="spExportTrendPdf" title="Export as PDF"><i class="fa-solid fa-file-pdf"></i></button>
-                <?php endif; ?>
+                <div class="d-flex align-items-center gap-2">
+                    <?php if ($trendData): ?>
+                        <button type="button" class="btn btn-sm sp-export-btn" id="spExportTrendPdf" title="Export as PDF"><i class="fa-solid fa-file-pdf"></i></button>
+                    <?php endif; ?>
+                    <button type="button" class="btn btn-sm sp-export-btn sp-expand-btn" title="Expand"><i class="fa-solid fa-expand"></i></button>
+                </div>
             </div>
             <?php if ($trendData): ?>
                 <div class="sp-chart-box" style="height:280px;"><canvas id="trendChart"></canvas></div>
@@ -335,9 +444,12 @@ require_once __DIR__ . '/../includes/admin_header.php';
         <div class="card p-3 h-100">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h6 class="mb-0">Peak Absence Days</h6>
-                <?php if ($dowData): ?>
-                    <button type="button" class="btn btn-sm sp-export-btn" id="spExportDowPdf" title="Export as PDF"><i class="fa-solid fa-file-pdf"></i></button>
-                <?php endif; ?>
+                <div class="d-flex align-items-center gap-2">
+                    <?php if ($dowData): ?>
+                        <button type="button" class="btn btn-sm sp-export-btn" id="spExportDowPdf" title="Export as PDF"><i class="fa-solid fa-file-pdf"></i></button>
+                    <?php endif; ?>
+                    <button type="button" class="btn btn-sm sp-export-btn sp-expand-btn" title="Expand"><i class="fa-solid fa-expand"></i></button>
+                </div>
             </div>
             <?php if ($dowData): ?>
                 <div class="sp-chart-box" style="height:280px;"><canvas id="dowChart"></canvas></div>
@@ -351,9 +463,12 @@ require_once __DIR__ . '/../includes/admin_header.php';
         <div class="card p-3 h-100">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h6 class="mb-0">Attendance Rate by Room</h6>
-                <?php if ($roomData): ?>
-                    <button type="button" class="btn btn-sm sp-export-btn" id="spExportRoomPdf" title="Export as PDF"><i class="fa-solid fa-file-pdf"></i></button>
-                <?php endif; ?>
+                <div class="d-flex align-items-center gap-2">
+                    <?php if ($roomData): ?>
+                        <button type="button" class="btn btn-sm sp-export-btn" id="spExportRoomPdf" title="Export as PDF"><i class="fa-solid fa-file-pdf"></i></button>
+                    <?php endif; ?>
+                    <button type="button" class="btn btn-sm sp-export-btn sp-expand-btn" title="Expand"><i class="fa-solid fa-expand"></i></button>
+                </div>
             </div>
             <?php if ($roomData): ?>
                 <div class="sp-chart-box" style="height:280px;"><canvas id="roomChart"></canvas></div>
@@ -367,9 +482,12 @@ require_once __DIR__ . '/../includes/admin_header.php';
         <div class="card p-3 h-100">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h6 class="mb-0">Attendance Rate by Course</h6>
-                <?php if ($courseData): ?>
-                    <button type="button" class="btn btn-sm sp-export-btn" id="spExportCoursePdf" title="Export as PDF"><i class="fa-solid fa-file-pdf"></i></button>
-                <?php endif; ?>
+                <div class="d-flex align-items-center gap-2">
+                    <?php if ($courseData): ?>
+                        <button type="button" class="btn btn-sm sp-export-btn" id="spExportCoursePdf" title="Export as PDF"><i class="fa-solid fa-file-pdf"></i></button>
+                    <?php endif; ?>
+                    <button type="button" class="btn btn-sm sp-export-btn sp-expand-btn" title="Expand"><i class="fa-solid fa-expand"></i></button>
+                </div>
             </div>
             <?php if ($courseData): ?>
                 <div class="sp-chart-box" style="height:280px;"><canvas id="courseChart"></canvas></div>
@@ -383,9 +501,12 @@ require_once __DIR__ . '/../includes/admin_header.php';
         <div class="card p-3 h-100">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h6 class="mb-0">Attendance Rate by Teacher</h6>
-                <?php if ($teacherData): ?>
-                    <button type="button" class="btn btn-sm sp-export-btn" id="spExportTeacherPdf" title="Export as PDF"><i class="fa-solid fa-file-pdf"></i></button>
-                <?php endif; ?>
+                <div class="d-flex align-items-center gap-2">
+                    <?php if ($teacherData): ?>
+                        <button type="button" class="btn btn-sm sp-export-btn" id="spExportTeacherPdf" title="Export as PDF"><i class="fa-solid fa-file-pdf"></i></button>
+                    <?php endif; ?>
+                    <button type="button" class="btn btn-sm sp-export-btn sp-expand-btn" title="Expand"><i class="fa-solid fa-expand"></i></button>
+                </div>
             </div>
             <?php if ($teacherData): ?>
                 <div class="sp-chart-box" style="height:280px;"><canvas id="teacherChart"></canvas></div>
@@ -399,70 +520,18 @@ require_once __DIR__ . '/../includes/admin_header.php';
         <div class="card p-3 h-100">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h6 class="mb-0">Peak Scan Times</h6>
-                <?php if ($hourData): ?>
-                    <button type="button" class="btn btn-sm sp-export-btn" id="spExportHourPdf" title="Export as PDF"><i class="fa-solid fa-file-pdf"></i></button>
-                <?php endif; ?>
+                <div class="d-flex align-items-center gap-2">
+                    <?php if ($hourData): ?>
+                        <button type="button" class="btn btn-sm sp-export-btn" id="spExportHourPdf" title="Export as PDF"><i class="fa-solid fa-file-pdf"></i></button>
+                    <?php endif; ?>
+                    <button type="button" class="btn btn-sm sp-export-btn sp-expand-btn" title="Expand"><i class="fa-solid fa-expand"></i></button>
+                </div>
             </div>
             <?php if ($hourData): ?>
                 <div class="sp-chart-box" style="height:280px;"><canvas id="hourChart"></canvas></div>
                 <?php echo renderChartInsights(insightsForPeak($hourLabels, $hourData, 'busiest scan hour', 'scans')); ?>
             <?php else: ?>
                 <p class="text-muted small mb-0">Not enough data yet.</p>
-            <?php endif; ?>
-        </div>
-    </div>
-    <div class="col-lg-6">
-        <div class="card p-3 h-100">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <h6 class="mb-0">Enrollment Growth <span class="text-muted small fw-normal">(last 6 months)</span></h6>
-                <?php if ($enrollData): ?>
-                    <button type="button" class="btn btn-sm sp-export-btn" id="spExportEnrollPdf" title="Export as PDF"><i class="fa-solid fa-file-pdf"></i></button>
-                <?php endif; ?>
-            </div>
-            <?php if ($enrollData): ?>
-                <div class="sp-chart-box" style="height:280px;"><canvas id="enrollChart"></canvas></div>
-                <?php echo renderChartInsights(insightsForEnrollment($enrollLabels, $enrollData)); ?>
-            <?php else: ?>
-                <p class="text-muted small mb-0">Not enough data yet.</p>
-            <?php endif; ?>
-        </div>
-    </div>
-    <div class="col-lg-6">
-        <div class="card p-3 h-100">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <h6 class="mb-0">At-Risk Students <span class="text-muted small fw-normal">(most late/absent)</span></h6>
-                <?php if ($atRiskResult->num_rows > 0): ?>
-                    <form method="post" class="d-inline-block">
-                        <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
-                        <input type="hidden" name="action" value="export_at_risk_pdf">
-                        <input type="hidden" name="course_id" value="<?php echo $courseFilterId; ?>">
-                        <input type="hidden" name="range" value="<?php echo htmlspecialchars($rangeFilter); ?>">
-                        <input type="hidden" name="date_from" value="<?php echo htmlspecialchars($customFromInput); ?>">
-                        <input type="hidden" name="date_to" value="<?php echo htmlspecialchars($customToInput); ?>">
-                        <button type="submit" class="btn btn-sm sp-export-btn" title="Export as PDF"><i class="fa-solid fa-file-pdf"></i></button>
-                    </form>
-                <?php endif; ?>
-            </div>
-            <?php if ($atRiskResult->num_rows === 0): ?>
-                <p class="text-muted small mb-0">No at-risk students right now.</p>
-            <?php else: ?>
-                <div class="table-responsive">
-                    <table class="table table-sm align-middle mb-0">
-                        <thead>
-                            <tr><th>Student</th><th>Course/Room</th><th class="text-center">Absent</th><th class="text-center">Late</th></tr>
-                        </thead>
-                        <tbody>
-                            <?php while ($row = $atRiskResult->fetch_assoc()): ?>
-                                <tr>
-                                    <td><?php echo htmlspecialchars($row['first_name'] . ' ' . $row['last_name']); ?></td>
-                                    <td class="text-muted small"><?php echo htmlspecialchars(trim(($row['course_code'] ?: '') . ' ' . ($row['room_name'] ?: ''))); ?></td>
-                                    <td class="text-center"><span class="badge bg-danger"><?php echo (int) $row['absents']; ?></span></td>
-                                    <td class="text-center"><span class="badge bg-warning"><?php echo (int) $row['lates']; ?></span></td>
-                                </tr>
-                            <?php endwhile; ?>
-                        </tbody>
-                    </table>
-                </div>
             <?php endif; ?>
         </div>
     </div>
@@ -594,6 +663,40 @@ require_once __DIR__ . '/../includes/admin_header.php';
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+// Expand/collapse a dashboard card into a full-screen view
+(function () {
+    var backdrop = document.createElement('div');
+    backdrop.className = 'sp-card-backdrop';
+    document.body.appendChild(backdrop);
+
+    function setExpanded(card, expanded) {
+        var btn = card.querySelector('.sp-expand-btn');
+        card.classList.toggle('sp-card-expanded', expanded);
+        backdrop.classList.toggle('show', expanded);
+        document.body.classList.toggle('overflow-hidden', expanded);
+        if (btn) {
+            btn.title = expanded ? 'Collapse' : 'Expand';
+            btn.querySelector('i').className = 'fa-solid ' + (expanded ? 'fa-compress' : 'fa-expand');
+        }
+    }
+
+    function collapseAll() {
+        document.querySelectorAll('.sp-card-expanded').forEach(function (card) { setExpanded(card, false); });
+    }
+
+    document.querySelectorAll('.sp-expand-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var card = btn.closest('.card');
+            var expanded = card.classList.contains('sp-card-expanded');
+            collapseAll();
+            if (!expanded) setExpanded(card, true);
+        });
+    });
+    backdrop.addEventListener('click', collapseAll);
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') collapseAll(); });
+})();
+</script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     var analyticsRangeFilter = document.getElementById('analyticsRangeFilter');
@@ -791,25 +894,95 @@ document.addEventListener('DOMContentLoaded', function () {
     });
     spWireExportBtn('spExportHourPdf', hourChart, 'Peak Scan Times');
     <?php endif; ?>
+});
+</script>
+<div class="modal fade" id="spEmailComposeModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-4 border-0 sp-compose-modal">
+            <form method="post" id="spEmailComposeForm">
+                <div class="sp-compose-header">
+                    <button type="button" class="sp-compose-close" data-bs-dismiss="modal" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+                    <h5 class="sp-compose-title">Compose Email</h5>
+                    <p class="sp-compose-subtitle">Send a message straight to this student's inbox.</p>
+                </div>
+                <div class="sp-compose-icon"><i class="fa-solid fa-envelope"></i></div>
+                <div class="sp-compose-body">
+                    <input type="hidden" name="csrf_token" value="<?php echo csrfToken(); ?>">
+                    <input type="hidden" name="action" value="send_at_risk_email">
+                    <input type="hidden" name="student_id" id="spEmailStudentId">
+                    <div class="sp-compose-field">
+                        <i class="fa-solid fa-user"></i>
+                        <input type="text" id="spEmailTo" aria-label="Recipient" disabled>
+                    </div>
+                    <div class="sp-compose-field">
+                        <i class="fa-solid fa-tag"></i>
+                        <input type="text" name="subject" id="spEmailSubject" aria-label="Subject" placeholder="Subject" maxlength="150" required>
+                    </div>
+                    <div class="sp-compose-field sp-compose-field--textarea">
+                        <i class="fa-solid fa-pen"></i>
+                        <textarea name="message" id="spEmailMessage" aria-label="Message" placeholder="Your message" rows="6" maxlength="3000" required></textarea>
+                    </div>
+                </div>
+                <div class="sp-compose-footer">
+                    <button type="button" class="btn sp-compose-cancel" data-bs-dismiss="modal" id="spEmailCancelBtn">Cancel</button>
+                    <button type="submit" class="btn sp-compose-send" id="spEmailSendBtn"><i class="fa-solid fa-paper-plane me-2"></i>Send Message</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<script>
+// Show a "Sending..." loading state while the email is being sent
+(function () {
+    var form = document.getElementById('spEmailComposeForm');
+    var sendBtn = document.getElementById('spEmailSendBtn');
+    var cancelBtn = document.getElementById('spEmailCancelBtn');
+    var modalEl = document.getElementById('spEmailComposeModal');
+    var closeBtn = modalEl.querySelector('[data-bs-dismiss="modal"]:not(#spEmailCancelBtn)');
+    var idleHtml = sendBtn.innerHTML;
+    var isSending = false;
 
-    <?php if ($enrollData): ?>
-    var enrollChart = new Chart(document.getElementById('enrollChart'), {
-        type: 'bar',
-        data: {
-            labels: <?php echo json_encode($enrollLabels); ?>,
-            datasets: [{ label: 'New Students', data: <?php echo json_encode($enrollData); ?>, backgroundColor: greenShadesForCount(<?php echo json_encode($enrollData); ?>), borderRadius: 6, maxBarThickness: 40 }]
-        },
-        options: {
-            responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
-            scales: {
-                x: { title: spAxisTitle('Month') },
-                y: { beginAtZero: true, ticks: { precision: 0 }, title: spAxisTitle('New Students') }
-            }
-        }
+    function setSending(sending) {
+        isSending = sending;
+        sendBtn.disabled = sending;
+        cancelBtn.disabled = sending;
+        if (closeBtn) closeBtn.disabled = sending;
+        modalEl.classList.toggle('sp-compose-sending', sending);
+        sendBtn.innerHTML = sending
+            ? '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Sending...'
+            : idleHtml;
+    }
+
+    // Once sending has started the modal can't be closed (Esc, backdrop click or the X)
+    modalEl.addEventListener('hide.bs.modal', function (e) {
+        if (isSending) e.preventDefault();
     });
-    spWireExportBtn('spExportEnrollPdf', enrollChart, 'Enrollment Growth');
-    <?php endif; ?>
+
+    form.addEventListener('submit', function (e) {
+        if (sendBtn.disabled) { e.preventDefault(); return; }
+        setSending(true);
+    });
+    // Reset if the page is restored from the back/forward cache
+    window.addEventListener('pageshow', function () { setSending(false); });
+})();
+</script>
+<script>
+document.querySelectorAll('.sp-email-trigger').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+        var name = btn.dataset.studentName;
+        var email = btn.dataset.email;
+        var absents = btn.dataset.absents;
+        var lates = btn.dataset.lates;
+        document.getElementById('spEmailStudentId').value = btn.dataset.studentId;
+        document.getElementById('spEmailTo').value = name + ' <' + email + '>';
+        document.getElementById('spEmailSubject').value = 'Attendance Reminder for ' + name;
+        document.getElementById('spEmailMessage').value =
+            'Hi ' + name + ',\n\n' +
+            'This is a reminder regarding your attendance record: ' + absents + ' absence(s) and ' + lates + ' late scan(s).\n\n' +
+            'Please make it a habit to attend classes on time. Reach out to the school office if you have any concerns.';
+        var modal = new bootstrap.Modal(document.getElementById('spEmailComposeModal'));
+        modal.show();
+    });
 });
 </script>
 <?php require_once __DIR__ . '/../includes/admin_footer.php'; ?>
