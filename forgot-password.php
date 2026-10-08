@@ -43,7 +43,7 @@ $schoolName = getSetting('school_name', 'Dr. Francisco L. Calingasan Memorial Co
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
     <link rel="stylesheet" href="assets/css/theme-tokens.css">
-    <link rel="stylesheet" href="assets/css/landing.css">
+    <link rel="stylesheet" href="assets/css/landing.css?v=<?php echo filemtime(__DIR__ . '/assets/css/landing.css'); ?>">
 </head>
 <body class="landing-body">
 
@@ -93,7 +93,7 @@ $schoolName = getSetting('school_name', 'Dr. Francisco L. Calingasan Memorial Co
                     </span>
                     <span class="lp-hero-title-line lp-hero-title-accent">Stronger Community.</span>
                 </h1>
-                <div class="lp-hero-divider"></div>
+                <div class="lp-hero-divider" aria-hidden="true"><span></span><i class="fa-solid fa-clock"></i><span></span></div>
                 <p class="lp-hero-desc">
                     TimeTrack is a modern attendance tracking system designed to record and monitor
                     college students' attendance during class sessions, with accuracy and ease.
@@ -117,9 +117,9 @@ $schoolName = getSetting('school_name', 'Dr. Francisco L. Calingasan Memorial Co
         <div class="text-center">
             <span class="lp-why-badge"><i class="fa-solid fa-star"></i> Powerful Features, Built for You</span>
             <h2 class="lp-why-title">Powerful Features for <span class="lp-why-title-accent">Smarter Attendance</span></h2>
-            <div class="lp-why-divider">
+            <div class="lp-why-divider" aria-hidden="true">
                 <span></span>
-                <i class="fa-solid fa-circle"></i>
+                <i class="fa-solid fa-clock"></i>
                 <span></span>
             </div>
         </div>
